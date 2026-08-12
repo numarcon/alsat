@@ -3,15 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import DriverNavigation from "../../components/DriverNavigation";
+import SignaturePad from "../../components/SignaturePad";
 import { supabase } from "../../lib/supabase";
 import { parsePickupQrValue } from "../../lib/warehouse-qr";
 
-type Screen = "dashboard" | "orders" | "detail" | "route" | "stops" | "scanner" | "receive" | "done" | "reports" | "notifications" | "vehicle" | "profile" | "fuel" | "documents" | "support" | "more";
+type Screen = "dashboard" | "orders" | "detail" | "proof" | "route" | "stops" | "scanner" | "receive" | "done" | "reports" | "notifications" | "vehicle" | "profile" | "fuel" | "documents" | "support" | "more";
 type Stop = { name: string; address: string; time: string; distance: string; status: "Жолда" | "Күтуде" | "Жоспарда" | "Жеткізілді"; coordinates: [number, number] };
 type PickupResult = { ok: boolean; code?: string; message: string };
-type RouteOrder = { code: string; orderId?: string; stop: Stop; contactName?: string; phone?: string; total?: number; items?: Array<{ name: string; quantity: number; price: number }> };
+type DeliveryPaymentMethod = "cash" | "transfer" | "credit";
+type DeliveryProofPayload = { paymentMethod: DeliveryPaymentMethod; amount: number; recipientName: string; signatureDataUrl: string; photo: File | null; note: string };
+type RouteOrder = { code: string; orderId?: string; companyId?: string; stop: Stop; contactName?: string; phone?: string; total?: number; items?: Array<{ name: string; quantity: number; price: number }> };
 type RemoteRouteOrder = {
   id: string;
+  company_id: string;
   total: number | string;
   warehouse_status: string | null;
   sticker_code: string | null;
@@ -42,6 +46,7 @@ function routeOrderFromRemote(row: RemoteRouteOrder, fallbackCode: string): Rout
   return {
     code: (row.sticker_code || fallbackCode).toUpperCase(),
     orderId: row.id,
+    companyId: row.company_id,
     stop: {
       name: store?.name || "Клиент тапсырысы",
       address: store?.address || "Мекенжай көрсетілмеген",
@@ -58,6 +63,20 @@ function routeOrderFromRemote(row: RemoteRouteOrder, fallbackCode: string): Rout
       return { name: product?.name || `Тауар ${index + 1}`, quantity: line.quantity, price: Number(line.unit_price) };
     }),
   };
+}
+
+function dataUrlToBlob(dataUrl: string) {
+  const [header, encoded] = dataUrl.split(",");
+  const mime = header.match(/data:(.*?);base64/)?.[1] || "image/png";
+  const binary = atob(encoded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
+}
+
+function safeFileExtension(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  return extension && /^[a-z0-9]{2,5}$/.test(extension) ? extension : (file.type === "image/png" ? "png" : "jpg");
 }
 
 export default function DispatcherApp() {
@@ -118,7 +137,7 @@ export default function DispatcherApp() {
     let active = true;
     supabase
       .from("orders")
-      .select("id,total,warehouse_status,sticker_code,stores(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))")
+      .select("id,company_id,total,warehouse_status,sticker_code,stores(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))")
       .in("sticker_code", missingCodes)
       .then(({ data, error }) => {
         if (!active || error || !data) return;
@@ -139,7 +158,7 @@ export default function DispatcherApp() {
     const code = parsed.stickerCode;
 
     if (supabase) {
-      let query = supabase.from("orders").select("id,total,warehouse_status,sticker_code,stores(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))").eq("sticker_code", code);
+      let query = supabase.from("orders").select("id,company_id,total,warehouse_status,sticker_code,stores(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))").eq("sticker_code", code);
       if (parsed.orderId) query = query.eq("id", parsed.orderId);
       const { data: remoteOrder, error: findError } = await query.limit(1).maybeSingle();
       if (findError) return { ok: false, message: `Тапсырысты тексеру мүмкін болмады: ${findError.message}` };
@@ -200,10 +219,42 @@ export default function DispatcherApp() {
     .filter((order): order is RouteOrder => Boolean(order));
   const selectedRouteOrder = routeOrders.find((order) => order.code === selectedOrderCode) ?? demoRouteOrder(selectedOrderCode) ?? { code: selectedOrderCode, stop: selectedStop };
   const selectRouteOrder = (order: RouteOrder) => { setSelectedOrderCode(order.code); setSelectedStop(order.stop); go("detail"); };
-  const completeDelivery = async () => {
-    if (selectedRouteOrder.orderId && supabase) {
-      const { error } = await supabase.from("orders").update({ status: "delivered" }).eq("id", selectedRouteOrder.orderId);
-      if (error) { window.alert(`Жеткізуді сақтау мүмкін болмады: ${error.message}`); return; }
+  const completeDelivery = async (proof: DeliveryProofPayload) => {
+    if (selectedRouteOrder.orderId && selectedRouteOrder.companyId && supabase) {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) throw new Error("Экспедитор аккаунты анықталмады. Қайта кіріңіз.");
+      const folder = `${selectedRouteOrder.companyId}/${selectedRouteOrder.orderId}/${Date.now()}`;
+      const signaturePath = `${folder}-signature.png`;
+      const photoPath = proof.photo ? `${folder}-photo.${safeFileExtension(proof.photo)}` : null;
+      const uploaded: string[] = [];
+      const { error: signatureError } = await supabase.storage.from("delivery-proofs").upload(signaturePath, dataUrlToBlob(proof.signatureDataUrl), { contentType: "image/png", upsert: false });
+      if (signatureError) throw new Error(`Қолтаңбаны сақтау мүмкін болмады: ${signatureError.message}`);
+      uploaded.push(signaturePath);
+      if (proof.photo && photoPath) {
+        const { error: photoError } = await supabase.storage.from("delivery-proofs").upload(photoPath, proof.photo, { contentType: proof.photo.type || "image/jpeg", upsert: false });
+        if (photoError) {
+          await supabase.storage.from("delivery-proofs").remove(uploaded);
+          throw new Error(`Жеткізу фотосын сақтау мүмкін болмады: ${photoError.message}`);
+        }
+        uploaded.push(photoPath);
+      }
+      const { error } = await supabase.from("orders").update({
+        status: "delivered",
+        delivered_at: new Date().toISOString(),
+        delivered_by: authData.user.id,
+        delivery_payment_method: proof.paymentMethod,
+        delivery_payment_amount: proof.amount,
+        delivery_recipient_name: proof.recipientName,
+        delivery_signature_path: signaturePath,
+        delivery_photo_path: photoPath,
+        delivery_note: proof.note || null,
+      }).eq("id", selectedRouteOrder.orderId);
+      if (error) {
+        await supabase.storage.from("delivery-proofs").remove(uploaded);
+        throw new Error(`Жеткізуді сақтау мүмкін болмады: ${error.message}`);
+      }
+    } else {
+      localStorage.setItem(`alsat-delivery-proof-${selectedOrderCode}`, JSON.stringify({ ...proof, signatureDataUrl: "saved", photo: proof.photo?.name || null, deliveredAt: new Date().toISOString() }));
     }
     setDeliveredOrders((current) => current.includes(selectedOrderCode) ? current : [...current, selectedOrderCode]);
     go("done");
@@ -212,7 +263,8 @@ export default function DispatcherApp() {
     <header className="role-header"><button onClick={() => go("more")}>☰</button><div><b>ALSAT</b><small>ЭКСПЕДИТОР</small></div><button onClick={() => go("notifications")}>♧</button></header>
     {screen === "dashboard" && <DispatcherDashboard go={go} />}
     {screen === "orders" && <DispatcherOrders go={go} onSelect={(stop) => { setSelectedStop(stop); setSelectedOrderCode(warehouseCode(stops.indexOf(stop))); go("detail"); }} />}
-    {screen === "detail" && <DispatcherDetail order={selectedRouteOrder} delivered={deliveredOrders.includes(selectedOrderCode)} backTo={routeStarted ? "route" : "orders"} go={go} onDeliver={() => { void completeDelivery(); }} />}
+    {screen === "detail" && <DispatcherDetail order={selectedRouteOrder} delivered={deliveredOrders.includes(selectedOrderCode)} backTo={routeStarted ? "route" : "orders"} go={go} onDeliver={() => go("proof")} />}
+    {screen === "proof" && <DeliveryProof order={selectedRouteOrder} go={go} onConfirm={completeDelivery} />}
     {screen === "route" && <DispatcherRoute go={go} started={routeStarted} routeOrders={acceptedRouteOrders} deliveredOrders={deliveredOrders} onStart={() => setRouteStarted(true)} onSelect={selectRouteOrder} />}
     {screen === "stops" && <StopList go={go} routeOrders={acceptedRouteOrders} deliveredOrders={deliveredOrders} onSelect={selectRouteOrder} />}
     {screen === "scanner" && <BarcodeScanner go={go} />}
@@ -226,7 +278,7 @@ export default function DispatcherApp() {
     {screen === "documents" && <Documents go={go} />}
     {screen === "support" && <Support go={go} />}
     {screen === "more" && <DispatcherMore go={go} />}
-    <nav className="role-bottom"><button className={screen === "dashboard" ? "active" : ""} onClick={() => go("dashboard")}>⌂<small>Басты</small></button><button className={screen === "orders" || screen === "detail" || screen === "done" || screen === "receive" ? "active" : ""} onClick={() => go("orders")}>▤<small>Тапсырыс</small></button><button className={screen === "route" || screen === "stops" ? "active" : ""} onClick={() => go("route")}>⌖<small>Маршрут</small></button><button className={screen === "notifications" ? "active" : ""} onClick={() => go("notifications")}>♧<small>Хабарлама</small></button><button className={screen === "profile" || screen === "more" ? "active" : ""} onClick={() => go("profile")}>♙<small>Профиль</small></button></nav>
+    <nav className="role-bottom"><button className={screen === "dashboard" ? "active" : ""} onClick={() => go("dashboard")}>⌂<small>Басты</small></button><button className={screen === "orders" || screen === "detail" || screen === "proof" || screen === "done" || screen === "receive" ? "active" : ""} onClick={() => go("orders")}>▤<small>Тапсырыс</small></button><button className={screen === "route" || screen === "stops" ? "active" : ""} onClick={() => go("route")}>⌖<small>Маршрут</small></button><button className={screen === "notifications" ? "active" : ""} onClick={() => go("notifications")}>♧<small>Хабарлама</small></button><button className={screen === "profile" || screen === "more" ? "active" : ""} onClick={() => go("profile")}>♙<small>Профиль</small></button></nav>
   </main>;
 }
 
@@ -244,6 +296,60 @@ function DispatcherDetail({ order, delivered, backTo, go, onDeliver }: { order: 
   const total = order.total ?? items.reduce((sum, item) => sum + item.quantity * item.price, 0);
   return <section className="role-screen"><div className="role-heading"><button className="back" onClick={()=>go(backTo)}>‹</button><h1>Тапсырыс №{order.code.replace(/^ST-/, "")}</h1><button onClick={()=>window.print()} aria-label="Тапсырысты басып шығару">⌯</button></div><span className="status green">{delivered?"Жеткізілді":order.stop.status}</span><div className="detail-card"><small>Клиент</small><strong>{order.stop.name}</strong><small>Мекенжайы</small><b>{order.stop.address}</b><small>Байланыс тұлға</small><b>{order.contactName || "Клиент өкілі"}{order.phone ? ` · ${order.phone}` : ""}</b></div><div className="detail-card"><small>Жеткізу уақыты</small><b>Бүгін, {order.stop.time} дейін</b><small>Төлем түрі</small><b>Тапсырыс шарты бойынша</b></div><div className="role-section-title"><h3>Тауарлар ({items.length})</h3><button onClick={()=>window.print()}>Басып шығару</button></div><div className="detail-card product-lines">{items.map((item)=><span key={`${item.name}-${item.price}`}>◌　{item.name} <b>{item.quantity} × {money(item.price)}</b></span>)}<strong>Жалпы сома <b>{money(total)}</b></strong></div>{delivered?<button className="role-primary" onClick={()=>go(backTo)}>Маршрутқа қайту</button>:<button className="role-primary" onClick={onDeliver}>Жеткізілді деп белгілеу</button>}</section>;
 }
+
+function DeliveryProof({ order, go, onConfirm }: { order: RouteOrder; go: (screen: Screen) => void; onConfirm: (proof: DeliveryProofPayload) => Promise<void> }) {
+  const [paymentMethod, setPaymentMethod] = useState<DeliveryPaymentMethod>("transfer");
+  const [amount, setAmount] = useState(String(order.total ?? 0));
+  const [recipientName, setRecipientName] = useState(order.contactName || "");
+  const [signatureDataUrl, setSignatureDataUrl] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [note, setNote] = useState("");
+  const [goodsConfirmed, setGoodsConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!photo) { setPhotoPreview(""); return; }
+    const url = URL.createObjectURL(photo);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+
+  const validAmount = Number(amount.replace(/\s/g, ""));
+  const ready = goodsConfirmed && Boolean(signatureDataUrl) && Boolean(recipientName.trim()) && Number.isFinite(validAmount) && validAmount >= 0;
+
+  const submit = async () => {
+    if (!ready || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onConfirm({ paymentMethod, amount: validAmount, recipientName: recipientName.trim(), signatureDataUrl, photo, note: note.trim() });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Жеткізуді сақтау мүмкін болмады";
+      setError(message.includes("delivery-proofs") || message.includes("column") ? "Жеткізу дәлелін сақтау бөлімі әлі қосылмаған. Delivery proof SQL файлын Supabase-та іске қосыңыз." : message);
+      setSaving(false);
+    }
+  };
+
+  return <section className="role-screen delivery-proof-screen">
+    <div className="role-heading"><button className="back" onClick={() => go("detail")}>‹</button><h1>Жеткізуді растау</h1><span>№{order.code.replace(/^ST-/, "")}</span></div>
+    <div className="proof-order-card"><span>✓</span><div><strong>{order.stop.name}</strong><small>{order.stop.address}</small></div><b>{money(order.total ?? 0)}</b></div>
+
+    <div className="proof-section"><div className="proof-title"><span>1</span><div><strong>Тауарды тапсыру</strong><small>Клиент тауар санын және қаптамасын тексерді</small></div></div><label className="proof-confirm"><input type="checkbox" checked={goodsConfirmed} onChange={(event) => setGoodsConfirmed(event.target.checked)} /> Тауар толық және зақымсыз тапсырылды</label></div>
+
+    <div className="proof-section"><div className="proof-title"><span>2</span><div><strong>Төлемді белгілеу</strong><small>Клиент қолданған төлем түрін таңдаңыз</small></div></div><div className="payment-methods"><button className={paymentMethod === "cash" ? "active" : ""} onClick={() => setPaymentMethod("cash")}>₸<small>Қолма-қол</small></button><button className={paymentMethod === "transfer" ? "active" : ""} onClick={() => setPaymentMethod("transfer")}>↗<small>Аударым</small></button><button className={paymentMethod === "credit" ? "active" : ""} onClick={() => setPaymentMethod("credit")}>◷<small>Қарызға</small></button></div><label className="proof-field">Расталған сома<div><input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ""))} /><b>₸</b></div></label></div>
+
+    <div className="proof-section"><div className="proof-title"><span>3</span><div><strong>Клиент қолтаңбасы</strong><small>Тауарды алған тұлғаның аты-жөні мен қолы</small></div></div><label className="proof-field">Қабылдаған тұлға<input value={recipientName} onChange={(event) => setRecipientName(event.target.value)} placeholder="Аты-жөні" /></label><SignaturePad value={signatureDataUrl} onChange={setSignatureDataUrl} /></div>
+
+    <div className="proof-section"><div className="proof-title"><span>4</span><div><strong>Жеткізу фотосы</strong><small>Міндетті емес · қораптарды немесе дүкенді түсіріңіз</small></div></div><label className={`delivery-photo-input ${photoPreview ? "has-photo" : ""}`}>{photoPreview ? <img src={photoPreview} alt="Жеткізу фотосының алдын ала көрінісі" /> : <><span>▧</span><strong>Фото түсіру</strong><small>JPG, PNG немесе WEBP · 10 МБ дейін</small></>}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => { const file = event.target.files?.[0] ?? null; if (file && file.size > 10 * 1024 * 1024) { setError("Фото көлемі 10 МБ-тан аспауы керек."); return; } setPhoto(file); setError(""); }} /></label>{photo && <button className="remove-photo" onClick={() => setPhoto(null)}>Фотосын өшіру</button>}<label className="proof-field">Ескерту<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Қажет болса, түсініктеме жазыңыз" /></label></div>
+
+    {error && <div className="proof-error">!　{error}</div>}
+    <button className="role-primary proof-submit" disabled={!ready || saving} onClick={() => { void submit(); }}>{saving ? "Сақталуда…" : "Жеткізуді аяқтау　✓"}</button>
+    {!ready && <small className="proof-hint">Тауарды растаңыз, қабылдаушының атын жазып, қолтаңба алыңыз.</small>}
+  </section>;
+}
+
 function DispatcherRoute({ go, onSelect, started, routeOrders, deliveredOrders, onStart }: { go: (screen: Screen) => void; onSelect: (order: RouteOrder) => void; started: boolean; routeOrders: RouteOrder[]; deliveredOrders: string[]; onStart: () => void }) {
   const remainingOrders = routeOrders.filter((order) => !deliveredOrders.includes(order.code));
   const completedCount = routeOrders.length - remainingOrders.length;

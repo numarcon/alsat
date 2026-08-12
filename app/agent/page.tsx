@@ -10,7 +10,7 @@ import { flushOrderQueue } from "../../lib/order-sync";
 type Screen = "dashboard" | "clients" | "new-store" | "client" | "catalog" | "order" | "orders" | "detail" | "route" | "visit" | "reports" | "profile" | "more";
 type Product = { id: number; name: string; subtitle: string; price: number; stock: number };
 type OrderRecord = { id: string; client: string; total: number; status: string; createdAt: string; items: Product[] };
-type AgentStore = { name: string; address: string; contact: string; phone: string; latitude: number; longitude: number };
+type AgentStore = { name: string; address: string; contact: string; phone: string; latitude?: number; longitude?: number };
 type SyncState = "idle" | "syncing" | "synced" | "offline";
 
 const products: Product[] = [
@@ -34,6 +34,7 @@ export default function AgentApp() {
   const [cart, setCart] = useState<Product[]>([products[0], products[2], products[3]]);
   const [selectedClient, setSelectedClient] = useState("Строймаг");
   const [storeNames, setStoreNames] = useState<string[]>(clients);
+  const [storeDetails, setStoreDetails] = useState<AgentStore[]>([]);
   const [orderSaved, setOrderSaved] = useState(false);
   const [orders, setOrders] = useState<OrderRecord[]>(initialOrders);
   const [lastOrder, setLastOrder] = useState<OrderRecord | null>(null);
@@ -49,6 +50,19 @@ export default function AgentApp() {
     const savedStores = localStorage.getItem("alsat-agent-stores");
     if (savedStores) {
       try { setStoreNames(JSON.parse(savedStores)); } catch { localStorage.removeItem("alsat-agent-stores"); }
+    }
+    const savedDetails = localStorage.getItem("alsat-agent-store-details");
+    if (savedDetails) {
+      try { setStoreDetails(JSON.parse(savedDetails)); } catch { localStorage.removeItem("alsat-agent-store-details"); }
+    }
+    const companyId = localStorage.getItem("alsat-company-id");
+    if (supabase && companyId) {
+      void supabase.from("stores").select("name,address,contact_name,phone,latitude,longitude").eq("company_id", companyId).then(({ data }) => {
+        if (!data?.length) return;
+        const remoteStores: AgentStore[] = data.map((store) => ({ name: store.name, address: store.address || "", contact: store.contact_name || "", phone: store.phone || "", latitude: store.latitude ?? undefined, longitude: store.longitude ?? undefined }));
+        setStoreDetails((current) => [...remoteStores, ...current.filter((local) => !remoteStores.some((remote) => remote.name.toLowerCase() === local.name.toLowerCase()))]);
+        setStoreNames((current) => [...remoteStores.map((store) => store.name), ...current.filter((name) => !remoteStores.some((store) => store.name.toLowerCase() === name.toLowerCase()))]);
+      });
     }
   }, []);
   useEffect(() => {
@@ -68,10 +82,11 @@ export default function AgentApp() {
   const remove = (id: number) => setCart((current) => { const index = current.findIndex((item) => item.id === id); return index < 0 ? current : [...current.slice(0, index), ...current.slice(index + 1)]; });
   const addStore = async (store: AgentStore) => {
     const next = [store.name, ...storeNames.filter((name) => name.toLowerCase() !== store.name.toLowerCase())];
+    const nextDetails = [store, ...storeDetails.filter((item) => item.name.toLowerCase() !== store.name.toLowerCase())];
     setStoreNames(next);
+    setStoreDetails(nextDetails);
     localStorage.setItem("alsat-agent-stores", JSON.stringify(next));
-    const storedDetails = JSON.parse(localStorage.getItem("alsat-agent-store-details") || "[]") as AgentStore[];
-    localStorage.setItem("alsat-agent-store-details", JSON.stringify([store, ...storedDetails.filter((item) => item.name.toLowerCase() !== store.name.toLowerCase())]));
+    localStorage.setItem("alsat-agent-store-details", JSON.stringify(nextDetails));
     const companyId = localStorage.getItem("alsat-company-id");
     if (supabase && companyId) {
       await supabase.from("stores").insert({ company_id: companyId, name: store.name, address: store.address, contact_name: store.contact, phone: store.phone, latitude: store.latitude, longitude: store.longitude });
@@ -100,7 +115,7 @@ export default function AgentApp() {
     {screen === "dashboard" && <Dashboard go={go} syncState={syncState} />}
     {screen === "clients" && <Clients clients={storeNames} go={go} onAdd={() => go("new-store")} onSelect={(name) => { setSelectedClient(name); go("client"); }} />}
     {screen === "new-store" && <NewStoreForm onCancel={() => go("clients")} onSave={addStore} />}
-    {screen === "client" && <ClientCard name={selectedClient} orders={orders} go={go} />}
+    {screen === "client" && <ClientCard name={selectedClient} store={storeDetails.find((store) => store.name.toLowerCase() === selectedClient.toLowerCase())} orders={orders} go={go} />}
     {screen === "catalog" && <Catalog products={products} cart={cart} add={add} go={go} />}
     {screen === "order" && <OrderForm products={products} cart={cart} total={total} client={selectedClient} remove={remove} go={go} onSave={saveOrder} />}
     {screen === "orders" && <Orders orders={orders} go={go} onSelect={(order) => { setSelectedClient(order.client); setOrderSaved(order.status !== "Жаңа"); setLastOrder(order); setCart(order.items); go("detail"); }} />}
@@ -140,12 +155,16 @@ function NewStoreForm({ onCancel, onSave }: { onCancel: () => void; onSave: (sto
   };
   return <section className="suite-screen new-store-screen"><button className="back-link" onClick={onCancel}>‹ Клиенттер</button><div className="screen-heading"><div><p className="overline">СӨ КАБИНЕТІ</p><h1>Жаңа дүкен</h1></div><span className="new-store-mark">+</span></div><p className="store-form-intro">Дүкен туралы ақпаратты енгізіңіз. Картадағы нүкте кейін экспедитор маршрутына автоматты қосылады.</p><form className="store-form" onSubmit={submit}><label>Дүкен атауы *<input name="name" placeholder="Мысалы, Строймаг" required autoFocus /></label><label>Мекенжайы *<input name="address" placeholder="Алматы қ., Райымбек 348" required /></label><label>Байланыс тұлғасы<input name="contact" placeholder="Алексей, директор" /></label><label>Телефон нөмірі<input name="phone" placeholder="+7 777 123 45 67" type="tel" /></label><LocationPicker value={location} onChange={(value) => { setLocation(value); setLocationError(""); }} />{locationError && <p className="location-error">{locationError}</p>}<div className="store-form-actions"><button type="button" onClick={onCancel}>Болдырмау</button><button className="save-order" type="submit">Дүкенді сақтау　→</button></div></form></section>
 }
-function ClientCard({ name, orders, go }: { name: string; orders: OrderRecord[]; go: (screen: Screen) => void }) {
+function ClientCard({ name, store, orders, go }: { name: string; store?: AgentStore; orders: OrderRecord[]; go: (screen: Screen) => void }) {
   const [tab, setTab] = useState<"info" | "orders" | "payments" | "notes">("info");
   const [notes, setNotes] = useState<string[]>([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [payments, setPayments] = useState<Array<{ id: number; amount: number; method: string; date: string }>>([]);
   const clientOrders = orders.filter((order) => order.client === name);
+  const address = store ? (store.address || "Көрсетілмеген") : "Алматы қ., Райымбек 348";
+  const contact = store ? (store.contact || "Көрсетілмеген") : "Алексей · Директор";
+  const phone = store ? (store.phone || "Көрсетілмеген") : "+7 777 987 65 43";
+  const callablePhone = phone.replace(/[^+\d]/g, "");
 
   useEffect(() => {
     const notesKey = `alsat-client-notes-${encodeURIComponent(name)}`;
@@ -178,11 +197,11 @@ function ClientCard({ name, orders, go }: { name: string; orders: OrderRecord[];
 
   return <section className="suite-screen">
     <button className="back-link" onClick={() => go("clients")}>‹ Клиенттер</button>
-    <div className="client-card-head"><div><span className="tag">Белсенді клиент</span><h1>{name}</h1><small>ЖШС · Алматы қ., Райымбек 348<br/>+7 777 123 45 67<br/>Жауапты: Нұрлан Ә.</small></div><button className="icon-button dark">✎</button></div>
-    <div className="client-actions"><button onClick={() => go("order")}>▣<small>Тапсырыс</small></button><button onClick={() => window.location.href = "tel:+77771234567"}>⌕<small>Қоңырау</small></button><button onClick={() => go("route")}>⌖<small>Маршрут</small></button><button onClick={() => go("more")}>•••<small>Көбірек</small></button></div>
+    <div className="client-card-head"><div><span className="tag">Белсенді клиент</span><h1>{name}</h1><small>ЖШС · {address}<br/>{phone}<br/>Жауапты: Нұрлан Ә.</small></div><button className="icon-button dark">✎</button></div>
+    <div className="client-actions"><button onClick={() => go("order")}>▣<small>Тапсырыс</small></button><button onClick={() => { if (callablePhone) window.location.href = `tel:${callablePhone}`; }}>⌕<small>Қоңырау</small></button><button onClick={() => go("route")}>⌖<small>Маршрут</small></button><button onClick={() => go("more")}>•••<small>Көбірек</small></button></div>
     <div className="tabs client-tabs"><button className={tab === "info" ? "active" : ""} onClick={() => setTab("info")}>Ақпарат</button><button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Тапсырыстар</button><button className={tab === "payments" ? "active" : ""} onClick={() => setTab("payments")}>Төлемдер</button><button className={tab === "notes" ? "active" : ""} onClick={() => setTab("notes")}>Ескертпелер</button></div>
 
-    {tab === "info" && <div className="client-tab-panel"><div className="info-card"><InfoRow label="Борышы" value="120 000 ₸"/><InfoRow label="Жалпы сатып алу" value="5 450 000 ₸"/><InfoRow label="Соңғы тапсырыс" value="12.05.2024"/><InfoRow label="Төлем түрі" value="Несие (14 күн)"/><InfoRow label="Жеңілдік" value="5%"/><InfoRow label="Лимит" value="1 000 000 ₸"/></div><div className="info-card"><strong>Байланыс тұлға</strong><InfoRow label="Алексей · Директор" value="+7 777 987 65 43"/><strong>Мекенжай</strong><InfoRow label="Негізгі" value="Алматы қ., Райымбек 348"/></div></div>}
+    {tab === "info" && <div className="client-tab-panel"><div className="info-card"><InfoRow label="Борышы" value="120 000 ₸"/><InfoRow label="Жалпы сатып алу" value="5 450 000 ₸"/><InfoRow label="Соңғы тапсырыс" value="12.05.2024"/><InfoRow label="Төлем түрі" value="Несие (14 күн)"/><InfoRow label="Жеңілдік" value="5%"/><InfoRow label="Лимит" value="1 000 000 ₸"/></div><div className="info-card"><strong>Байланыс тұлға</strong><InfoRow label={contact} value={phone}/><strong>Мекенжай</strong><InfoRow label="Негізгі" value={address}/>{store?.latitude != null && store?.longitude != null && <InfoRow label="Карта нүктесі" value={`${store.latitude.toFixed(5)}, ${store.longitude.toFixed(5)}`}/>}</div></div>}
 
     {tab === "orders" && <div className="client-tab-panel"><div className="tab-panel-heading"><div><strong>Дүкен тапсырыстары</strong><small>{clientOrders.length} тапсырыс</small></div><button onClick={() => go("order")}>＋ Жаңа</button></div>{clientOrders.length ? clientOrders.map((order) => <button className="client-history-row" key={order.id} onClick={() => go("orders")}><span>▣</span><div><strong>{order.id}</strong><small>{order.createdAt} · {order.items.length} тауар</small></div><div><b>{money(order.total)}</b><em>{order.status}</em></div></button>) : <div className="empty client-empty">Бұл дүкенде тапсырыс жоқ.<button onClick={() => go("order")}>Алғашқы тапсырысты қосу</button></div>}</div>}
 

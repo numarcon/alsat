@@ -115,16 +115,17 @@ function WarehouseOrders({ orders, go, onSelect }: { orders: WarehouseOrder[]; g
 }
 
 function WarehouseOrderDetail({ order, go, updateOrder }: { order: WarehouseOrder; go: (screen: Screen) => void; updateOrder: (patch: Partial<WarehouseOrder>) => void }) {
-  const [sticker, setSticker] = useState(order.sticker ?? "");
-  const [waybill, setWaybill] = useState(order.waybill ?? "");
+  const documentNumber = order.id.replace(/\D/g, "").slice(-6).padStart(6, "0");
+  const [sticker, setSticker] = useState(order.sticker ?? `ST-${documentNumber}`);
+  const [waybill, setWaybill] = useState(order.waybill ?? `НК-${documentNumber}`);
   const [stickerAttached, setStickerAttached] = useState(order.stickerAttached ?? false);
   const [waybillPlaced, setWaybillPlaced] = useState(order.waybillPlaced ?? false);
   const steps: Array<{ key: OrderStatus; label: string }> = [{ key: "new", label: "Қоймаға түсті" }, { key: "picking", label: "Жинауға кірістім" }, { key: "ready", label: "Жинау аяқталды" }, { key: "labeled", label: "Стикер және накладной" }, { key: "shipped", label: "Жөнелтілді" }];
   const currentIndex = steps.findIndex((step) => step.key === order.status);
   const advance = () => {
     if (order.status === "new") updateOrder({ status: "picking" });
-    else if (order.status === "picking") updateOrder({ status: "ready" });
-      else if (order.status === "ready" && sticker.trim() && waybill.trim() && stickerAttached && waybillPlaced) updateOrder({ status: "labeled", sticker: sticker.trim(), waybill: waybill.trim(), stickerAttached, waybillPlaced });
+    else if (order.status === "picking") updateOrder({ status: "ready", sticker, waybill });
+    else if (order.status === "ready" && stickerAttached && waybillPlaced) updateOrder({ status: "labeled", sticker, waybill, stickerAttached, waybillPlaced });
     else if (order.status === "labeled") updateOrder({ status: "shipped" });
   };
   const actionLabel = order.status === "new" ? "Қабылдадым, жинауға кірістім" : order.status === "picking" ? "Жинау аяқталды — дайын" : order.status === "ready" ? "Стикер және накладной бекіту" : order.status === "labeled" ? "Жөнелтуге беру" : "Тапсырыс аяқталды";

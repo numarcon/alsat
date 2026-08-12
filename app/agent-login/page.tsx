@@ -1,0 +1,4 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+export default function AgentLogin(){const [phone,setPhone]=useState("");return <main className="qmart-login"><div className="qmart-login-brand"><span className="qmark">Q</span><b>QMART</b><small>САУДА ӨКІЛІ</small></div><div className="qmart-login-copy"><h1>Сауда өкілі ретінде кіріңіз</h1><p>Тапсырыстар, клиенттер және комиссиялар бір жерде.</p></div><label>Телефон нөміріңіз<input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+7 (___) ___-__-__" inputMode="tel" /></label><Link className="qmart-login-btn" href="/">Кіру</Link><div className="qmart-or"><span>немесе</span></div><button className="google-login">G　Google арқылы кіру</button><a className="forgot">Құпия сөзді ұмыттыңыз ба?</a><small className="offline-note">◉　Offline режимі қолжетімді</small></main>}

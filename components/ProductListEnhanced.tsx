@@ -1,0 +1,11 @@
+"use client";
+
+type Product = { id: number; name: string; sku: string; price: number; purchasePrice?: number; salePrice?: number; wholesalePrice?: number; imageUrl?: string; stock: number; commission: number; workspace: boolean; agents: boolean; marketplace: boolean };
+
+const money = (value: number) => `${value.toLocaleString("kk-KZ")} ₸`;
+
+export default function ProductListEnhanced({ products, onAdd, onToggle, onEdit }: { products: Product[]; onAdd: () => void; onToggle: (id: number, field: "workspace" | "agents" | "marketplace") => void; onEdit: (product: Product) => void }) {
+  return <><div className="page-actions"><p>Барлық тауарды, бағаны және Marketplace жариялануын басқарыңыз.</p><button className="primary" onClick={onAdd}>+ Тауар қосу</button></div><section className="card product-card"><div className="table-head"><span>Тауар</span><span>Бағалар</span><span>Қойма</span><span>Көрінуі</span><span/></div>{products.length ? products.map((product) => <article className="product-row enhanced-product-row" key={product.id}><div className="product-name"><span className="product-thumb">{product.imageUrl ? <img src={product.imageUrl} alt=""/> : "▦"}</span><div><strong>{product.name}</strong><small>{product.sku} · СӨ комиссиясы {product.commission}%</small></div></div><div className="product-price-stack"><b>Сату: {money(product.salePrice ?? product.price)}</b><small>Кіру: {money(product.purchasePrice ?? 0)}</small><small>Көтерме: {money(product.wholesalePrice ?? 0)}</small></div><span>{product.stock} бірл.</span><div className="visibility"><button className="edit-product-button" onClick={() => onEdit(product)}>Өзгерту</button><Toggle label="Workspace" value={product.workspace} onChange={() => onToggle(product.id, "workspace")}/><Toggle label="СӨ" value={product.agents} onChange={() => onToggle(product.id, "agents")}/><Toggle label="Market" value={product.marketplace} onChange={() => onToggle(product.id, "marketplace")}/></div></article>) : <div className="empty">Тауар жоқ. Бірінші тауарды қосыңыз.</div>}</section></>;
+}
+
+function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: () => void }) { return <button type="button" onClick={onChange} className={value ? "toggle yes" : "toggle"}><i/> {label}</button>; }

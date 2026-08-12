@@ -71,6 +71,7 @@ export default function DispatcherApp() {
   const [routeStarted, setRouteStarted] = useState(false);
   const [deliveryStateReady, setDeliveryStateReady] = useState(false);
   const [initialPickupCode, setInitialPickupCode] = useState("");
+  const routeHydrationAttempted = useRef(new Set<string>());
   useEffect(() => {
     if (!supabase) return;
     let active = true;
@@ -111,16 +112,18 @@ export default function DispatcherApp() {
   }, [acceptedOrders, deliveredOrders, deliveryStateReady, routeOrders, routeStarted]);
   useEffect(() => {
     if (!logged || !supabase || acceptedOrders.length === 0) return;
-    const missingCodes = acceptedOrders.filter((code) => !routeOrders.some((order) => order.code === code));
+    const missingCodes = acceptedOrders.filter((code) => !routeOrders.some((order) => order.code === code) && !routeHydrationAttempted.current.has(code));
     if (missingCodes.length === 0) return;
+    missingCodes.forEach((code) => routeHydrationAttempted.current.add(code));
     let active = true;
     supabase
       .from("orders")
       .select("id,total,warehouse_status,sticker_code,stores(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))")
       .in("sticker_code", missingCodes)
-      .then(({ data }) => {
-        if (!active || !data) return;
+      .then(({ data, error }) => {
+        if (!active || error || !data) return;
         const restored = (data as unknown as RemoteRouteOrder[]).map((row) => routeOrderFromRemote(row, row.sticker_code || ""));
+        if (restored.length === 0) return;
         setRouteOrders((current) => [...current, ...restored.filter((order) => !current.some((item) => item.code === order.code))]);
       });
     return () => { active = false; };

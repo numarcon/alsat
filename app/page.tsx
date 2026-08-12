@@ -4,28 +4,114 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { supabase } from "../lib/supabase";
-import { roleLabel } from "../lib/workspace-auth";
+import { getWorkspaceIdentity } from "../lib/workspace-auth";
+import { bootstrapOwnerCompany, PendingCompany, rememberCompany, savePendingCompany } from "../lib/company-bootstrap";
 
 type Product = { id: number; name: string; sku: string; price: number; stock: number; commission: number; workspace: boolean; agents: boolean; marketplace: boolean };
 const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
-const starter: Product[] = [{ id: 1, name: "Кабель ВВГнг 3×2.5", sku: "VVG-325", price: 78500, stock: 36, commission: 5, workspace: true, agents: true, marketplace: false }, { id: 2, name: "Автоматты ажыратқыш C16", sku: "AB-C16", price: 2450, stock: 120, commission: 7, workspace: true, agents: true, marketplace: true }];
 const nav = [{ id: "home", icon: "⌂", label: "Басты бет" }, { id: "products", icon: "▦", label: "Тауарлар" }, { id: "agents", icon: "◉", label: "Сауда өкілдері" }, { id: "orders", icon: "▤", label: "Тапсырыстар" }, { id: "commissions", icon: "₸", label: "Комиссиялар" }];
 
 export default function Home() {
-  const [screen, setScreen] = useState("home"), [registered, setRegistered] = useState(false), [products, setProducts] = useState<Product[]>(starter), [notice, setNotice] = useState(""), [companyId, setCompanyId] = useState<string | null>(null);
-  useEffect(() => { const forceRegistration = new URLSearchParams(window.location.search).get("start") === "registration"; setRegistered(forceRegistration ? false : localStorage.getItem("alsat-company") === "1"); setCompanyId(localStorage.getItem("alsat-company-id")); const saved = localStorage.getItem("alsat-products"); if (saved) setProducts(JSON.parse(saved)); }, []);
-  useEffect(() => { if (!supabase || !companyId) return; supabase.from("products").select("id,name,sku,price,stock,commission_rate,workspace_active,agent_visible,marketplace_published").eq("company_id", companyId).order("created_at", { ascending: false }).then(({ data }) => { if (data?.length) setProducts(data.map(p => ({ id: p.id, name: p.name, sku: p.sku ?? "", price: Number(p.price), stock: p.stock, commission: Number(p.commission_rate), workspace: p.workspace_active, agents: p.agent_visible, marketplace: p.marketplace_published }))); }); }, [companyId]);
-  useEffect(() => { if (registered) localStorage.setItem("alsat-products", JSON.stringify(products)); }, [products, registered]);
+  const [screen, setScreen] = useState("home"), [registered, setRegistered] = useState(false), [checking, setChecking] = useState(true), [products, setProducts] = useState<Product[]>([]), [notice, setNotice] = useState(""), [companyId, setCompanyId] = useState<string | null>(null), [companyName, setCompanyName] = useState("Компания Workspace"), [registrationMessage, setRegistrationMessage] = useState(""), [registrationError, setRegistrationError] = useState(""), [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    let active = true;
+    async function restoreWorkspace() {
+      const forceRegistration = new URLSearchParams(window.location.search).get("start") === "registration";
+      const saved = !supabase ? localStorage.getItem("alsat-products") : null;
+      if (saved) setProducts(JSON.parse(saved));
+      if (forceRegistration) { if (active) { setRegistered(false); setChecking(false); } return; }
+      if (!supabase) {
+        if (active) {
+          setRegistered(localStorage.getItem("alsat-company") === "1");
+          setCompanyId(localStorage.getItem("alsat-company-id"));
+          setCompanyName(localStorage.getItem("alsat-company-name") || "Компания Workspace");
+          setChecking(false);
+        }
+        return;
+      }
+      const identity = await getWorkspaceIdentity();
+      const owner = identity.memberships.find((membership) => membership.role === "owner");
+      if (!active) return;
+      if (owner) {
+        const { data: company } = await supabase.from("companies").select("name").eq("id", owner.company_id).single();
+        const name = company?.name ?? "Компания Workspace";
+        rememberCompany(owner.company_id, name);
+        setCompanyId(owner.company_id);
+        setCompanyName(name);
+        setRegistered(true);
+      } else {
+        localStorage.removeItem("alsat-company");
+        localStorage.removeItem("alsat-company-id");
+        setRegistered(false);
+      }
+      setChecking(false);
+    }
+    void restoreWorkspace();
+    return () => { active = false; };
+  }, []);
+  useEffect(() => { if (!supabase || !companyId) return; supabase.from("products").select("id,name,sku,price,stock,commission_rate,workspace_active,agent_visible,marketplace_published").eq("company_id", companyId).order("created_at", { ascending: false }).then(({ data }) => { if (data) setProducts(data.map(p => ({ id: p.id, name: p.name, sku: p.sku ?? "", price: Number(p.price), stock: p.stock, commission: Number(p.commission_rate), workspace: p.workspace_active, agents: p.agent_visible, marketplace: p.marketplace_published }))); }); }, [companyId]);
+  useEffect(() => { if (registered && !supabase) localStorage.setItem("alsat-products", JSON.stringify(products)); }, [products, registered]);
   const agentProducts = products.filter(p => p.workspace && p.agents);
   const totalStock = products.reduce((n, p) => n + p.stock, 0);
-  async function saveCompany(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); let id: string | null = null; let ownerId: string | null = null; if (supabase) { const { data: userData } = await supabase.auth.getUser(); ownerId = userData.user?.id ?? null; const { data: row } = await supabase.from("companies").insert({ ...(ownerId ? { owner_id: ownerId } : {}), name: String(data.get("company")), bin: String(data.get("bin") || ""), city: String(data.get("city")), phone: String(data.get("phone")) }).select("id").single(); id = row?.id ?? null; if (id && ownerId) await supabase.from("company_members").upsert({ company_id: id, user_id: ownerId, role: "owner", full_name: String(data.get("company")), status: "active" }); } if (id) { localStorage.setItem("alsat-company-id", id); setCompanyId(id); } localStorage.setItem("alsat-company", "1"); setRegistered(true); setNotice(id ? `Компания Supabase-ке сақталды · ${roleLabel("owner")}` : "Demo workspace ашылды. Көппайдаланушы режимі үшін Auth арқылы кіріңіз."); }
+  async function saveCompany(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setRegistrationError("");
+    setRegistrationMessage("");
+    const data = new FormData(event.currentTarget);
+    const pending: PendingCompany = {
+      company: String(data.get("company")),
+      bin: String(data.get("bin") || ""),
+      city: String(data.get("city")),
+      phone: String(data.get("phone")),
+      fullName: String(data.get("fullName")),
+      email: String(data.get("email")).trim().toLowerCase(),
+    };
+    const password = String(data.get("password"));
+    if (!supabase || !isSupabaseConfigured) { setRegistrationError("Supabase қосылмаған. Vercel environment айнымалыларын тексеріңіз."); return; }
+    savePendingCompany(pending);
+    setSubmitting(true);
+    try {
+      const { data: current } = await supabase.auth.getUser();
+      let user = current.user;
+      if (user && user.email?.toLowerCase() !== pending.email) {
+        await supabase.auth.signOut();
+        user = null;
+      }
+      if (!user) {
+        const { data: signup, error: signupError } = await supabase.auth.signUp({
+          email: pending.email,
+          password,
+          options: { data: { full_name: pending.fullName }, emailRedirectTo: `${window.location.origin}/workspace-login` },
+        });
+        if (signupError) throw signupError;
+        user = signup.user;
+        if (!signup.session) {
+          setRegistrationMessage("Email-ға растау хаты жіберілді. Сілтемені басып, кейін Workspace-қа кіріңіз.");
+          return;
+        }
+      }
+      if (!user) throw new Error("Аккаунт ашылмады. Қайта көріңіз.");
+      const company = await bootstrapOwnerCompany(user.id, pending);
+      rememberCompany(company.id, company.name);
+      setCompanyId(company.id);
+      setCompanyName(company.name);
+      setRegistered(true);
+      setNotice("Компания Supabase-ке сақталды · Компания әкімшісі");
+    } catch (registrationFailure) {
+      const message = registrationFailure instanceof Error ? registrationFailure.message : "Тіркелу аяқталмады.";
+      setRegistrationError(message.includes("already registered") ? "Бұл email бұрын тіркелген. Workspace-қа кіру батырмасын пайдаланыңыз." : message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
   async function addProduct(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const product: Product = { id: Date.now(), name: String(data.get("name")), sku: String(data.get("sku")), price: Number(data.get("price")), stock: Number(data.get("stock")), commission: Number(data.get("commission")), workspace: data.get("workspace") === "on", agents: data.get("agents") === "on", marketplace: data.get("marketplace") === "on" }; if (supabase && companyId) await supabase.from("products").insert({ company_id: companyId, name: product.name, sku: product.sku, price: product.price, stock: product.stock, commission_rate: product.commission, workspace_active: product.workspace, agent_visible: product.agents, marketplace_published: product.marketplace }); setProducts([product, ...products]); event.currentTarget.reset(); setScreen("products"); setNotice(supabase && companyId ? "Тауар Supabase-ке сақталды" : "Тауар каталогқа қосылды"); }
   function toggle(id: number, field: "workspace" | "agents" | "marketplace") { const product = products.find((item) => item.id === id); if (!product) return; const value = !product[field]; setProducts(products.map((item) => item.id === id ? { ...item, [field]: value } : item)); if (supabase && companyId) { const column = field === "workspace" ? "workspace_active" : field === "agents" ? "agent_visible" : "marketplace_published"; void supabase.from("products").update({ [column]: value }).eq("id", id); } }
-  if (!registered) return <Registration onSubmit={saveCompany} onDemo={() => { localStorage.setItem("alsat-company", "1"); setRegistered(true); }} />;
-  return <main className="shell"><aside className="sidebar"><Brand /><Link className="agent-switch" href="/agent">↗ СӨ кабинетін көру</Link><div className="role-links"><Link href="/dispatcher">Экспедитор кабинеті</Link><Link href="/warehouse">Қойма менеджері</Link></div><nav>{nav.map(n => <button key={n.id} className={screen === n.id ? "nav active" : "nav"} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav><div className="sidebar-foot"><span className="avatar">А</span><div><strong>Alsat Company</strong><small>Компания әкімшісі</small></div></div></aside><section className="content"><header><div><p className="eyebrow">ALSAT WORKSPACE</p><h1>{screen === "home" ? "Қайырлы күн, Alsat" : nav.find(n => n.id === screen)?.label}</h1></div><button className="bell" onClick={() => setNotice("Жаңа хабарлама жоқ. Барлық дерек синхрондалды.")} aria-label="Хабарламалар">⌁</button></header>{notice && <div className="toast">✓ {notice}<button onClick={() => setNotice("")}>×</button></div>}{screen === "home" && <Dashboard products={products} stock={totalStock} onAdd={() => setScreen("create")} onOrders={() => setScreen("orders")} />}{screen === "products" && <Products products={products} onAdd={() => setScreen("create")} onToggle={toggle} />}{screen === "create" && <ProductForm onSubmit={addProduct} onCancel={() => setScreen("products")} />}{screen === "agents" && <Agents products={agentProducts} />}{screen === "orders" && <Orders products={agentProducts} />}{screen === "commissions" && <Commissions products={products} />}</section><nav className="mobile-nav">{nav.slice(0, 4).map(n => <button key={n.id} className={screen === n.id ? "active" : ""} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav><div className="supabase-status">{isSupabaseConfigured ? "● Supabase қосылған" : "○ Demo режимі"}</div></main>;
+  if (checking) return <main className="workspace-checking"><Brand /><p>Workspace тексерілуде…</p></main>;
+  if (!registered) return <Registration onSubmit={saveCompany} message={registrationMessage} error={registrationError} loading={submitting} />;
+  return <main className="shell"><aside className="sidebar"><Brand /><Link className="agent-switch" href="/agent">↗ СӨ кабинетін көру</Link><div className="role-links"><Link href="/dispatcher">Экспедитор кабинеті</Link><Link href="/warehouse">Қойма менеджері</Link><Link href="/admin">Alsat Admin</Link></div><nav>{nav.map(n => <button key={n.id} className={screen === n.id ? "nav active" : "nav"} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav><div className="sidebar-foot"><span className="avatar">{companyName[0] || "A"}</span><div><strong>{companyName}</strong><small>Компания әкімшісі</small></div></div></aside><section className="content"><header><div><p className="eyebrow">ALSAT WORKSPACE</p><h1>{screen === "home" ? `Қайырлы күн, ${companyName}` : nav.find(n => n.id === screen)?.label}</h1></div><button className="bell" onClick={() => setNotice("Жаңа хабарлама жоқ. Барлық дерек синхрондалды.")} aria-label="Хабарламалар">⌁</button></header>{notice && <div className="toast">✓ {notice}<button onClick={() => setNotice("")}>×</button></div>}{screen === "home" && <Dashboard products={products} stock={totalStock} onAdd={() => setScreen("create")} onOrders={() => setScreen("orders")} />}{screen === "products" && <Products products={products} onAdd={() => setScreen("create")} onToggle={toggle} />}{screen === "create" && <ProductForm onSubmit={addProduct} onCancel={() => setScreen("products")} />}{screen === "agents" && <Agents products={agentProducts} />}{screen === "orders" && <Orders products={agentProducts} />}{screen === "commissions" && <Commissions products={products} />}</section><nav className="mobile-nav">{nav.slice(0, 4).map(n => <button key={n.id} className={screen === n.id ? "active" : ""} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav><div className="supabase-status">{isSupabaseConfigured ? "● Нақты дерекқор" : "○ Баптау қажет"}</div></main>;
 }
 function Brand(){ return <div className="brand"><span>А</span><b>alsat</b><em>workspace</em></div> }
-function Registration({onSubmit,onDemo}:{onSubmit:(e:FormEvent<HTMLFormElement>)=>void;onDemo:()=>void}) { return <main className="registration"><section className="register-copy"><Brand /><div><p className="eyebrow">ALSAT WORKSPACE</p><h1>Сатуды бір жерден басқарыңыз</h1><p>Компания, каталог, сауда өкілдері және тапсырыстар — бір ыңғайлы workspace-та.</p></div><div className="feature-list"><span>✓ Тауарларды СӨ-ге бөлек ашу</span><span>✓ Marketplace-ке саналы жариялау</span><span>✓ Мобильді сауда ағыны</span></div></section><section className="register-card"><div><p className="eyebrow">1 / 1 ҚАДАМ</p><h2>Компанияны тіркеу</h2><p>Workspace-ыңызды бірнеше минутта ашыңыз.</p></div><form onSubmit={onSubmit}><label>Компания атауы<input required placeholder="Мысалы, Alsat Company" name="company" /></label><div className="two"><label>БСН<input placeholder="123456789012" name="bin" /></label><label>Қала<input required placeholder="Алматы" name="city" /></label></div><label>Байланыс телефоны<input required placeholder="+7 700 000 00 00" name="phone" /></label><button className="primary full">Workspace ашу <span>→</span></button></form><button className="demo-entry" onClick={onDemo}>Demo Workspace-қа кіру →</button><small>Тіркелу арқылы Alsat платформасының шарттарымен келісесіз.</small></section></main> }
+function Registration({onSubmit,message,error,loading}:{onSubmit:(e:FormEvent<HTMLFormElement>)=>void;message:string;error:string;loading:boolean}) { return <main className="registration"><section className="register-copy"><Brand /><div><p className="eyebrow">ALSAT WORKSPACE</p><h1>Сатуды бір жерден басқарыңыз</h1><p>Компания, каталог, сауда өкілдері және тапсырыстар — бір ыңғайлы workspace-та.</p></div><div className="feature-list"><span>✓ Тауарларды СӨ-ге бөлек ашу</span><span>✓ Marketplace-ке саналы жариялау</span><span>✓ Мобильді сауда ағыны</span></div></section><section className="register-card"><div><p className="eyebrow">НАҚТЫ WORKSPACE</p><h2>Компанияны тіркеу</h2><p>Компания мен әкімші аккаунтын бірге ашыңыз.</p></div><form onSubmit={onSubmit}><label>Компания атауы<input required placeholder="Мысалы, Kraus Electric" name="company" /></label><div className="two"><label>БСН<input placeholder="123456789012" name="bin" inputMode="numeric" /></label><label>Қала<input required placeholder="Алматы" name="city" /></label></div><div className="two"><label>Әкімшінің аты-жөні<input required placeholder="Нұрлан Әбдірахманов" name="fullName" /></label><label>Байланыс телефоны<input required placeholder="+7 700 000 00 00" name="phone" /></label></div><label>Email<input required type="email" placeholder="name@company.kz" name="email" autoComplete="email" /></label><label>Құпия сөз<input required type="password" minLength={8} placeholder="Кемінде 8 таңба" name="password" autoComplete="new-password" /></label>{message&&<div className="register-feedback success">✓ {message}<Link href="/workspace-login">Workspace-қа кіру →</Link></div>}{error&&<div className="register-feedback error">{error}</div>}<button className="primary full" disabled={loading}>{loading?"Workspace ашылуда…":"Workspace ашу"} <span>→</span></button></form><Link className="demo-entry register-login" href="/workspace-login">Аккаунтым бар — кіру →</Link><small>Бұл демо емес: компания Supabase-ке сақталып, сіз owner рөлін аласыз.</small></section></main> }
 function Dashboard({products, stock, onAdd, onOrders}:{products:Product[];stock:number;onAdd:()=>void;onOrders:()=>void}) { return <><div className="page-actions"><p>Компанияңыздың бүгінгі көрсеткіштері.</p><button className="primary" onClick={onAdd}>+ Тауар қосу</button></div><div className="stats"><Stat label="Белсенді тауарлар" value={String(products.filter(p=>p.workspace).length)} detail="Workspace каталогында" icon="▦"/><Stat label="Сауда өкілдері" value="4" detail="3 белсенді" icon="◉"/><Stat label="Бүгінгі тапсырыстар" value="8" detail={money.format(428500)} icon="▤"/><Stat label="Қоймадағы тауар" value={String(stock)} detail="бірлік" icon="□"/></div><div className="grid"><section className="card activity"><div className="card-title"><div><h3>Соңғы тапсырыстар</h3><p>Бүгінгі белсенділік</p></div><button className="link" onClick={onOrders}>Барлығын көру</button></div><OrderRow name="Дүкен «Арман»" sum="98 400 ₸" status="Жаңа"/><OrderRow name="ЭлектроМаркет" sum="165 000 ₸" status="Жиналуда"/><OrderRow name="Құрылыс KZ" sum="44 700 ₸" status="Жеткізілді"/></section><section className="card launch"><p className="eyebrow">ЖЫЛДАМ ӘРЕКЕТ</p><h3>Каталогыңызды іске қосыңыз</h3><p>Тауарды қосып, сауда өкілдеріне қолжетімді етіңіз.</p><button className="white-button" onClick={onAdd}>Тауар қосу →</button></section></div></> }
 function Stat({label,value,detail,icon}:{label:string;value:string;detail:string;icon:string}){return <section className="stat"><span className="stat-icon">{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></section>}
 function OrderRow({name,sum,status}:{name:string;sum:string;status:string}){return <div className="order-row"><span className="order-icon">▤</span><div><strong>{name}</strong><small>Бүгін, 11:40</small></div><div><b>{sum}</b><span className={'badge '+status}>{status}</span></div></div>}

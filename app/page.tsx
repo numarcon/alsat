@@ -12,6 +12,7 @@ const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT
 const nav = [{ id: "home", icon: "⌂", label: "Басты бет" }, { id: "products", icon: "▦", label: "Тауарлар" }, { id: "agents", icon: "◉", label: "Сауда өкілдері" }, { id: "orders", icon: "▤", label: "Тапсырыстар" }, { id: "commissions", icon: "₸", label: "Комиссиялар" }];
 
 export default function Home() {
+  const [loggingOut, setLoggingOut] = useState(false);
   const [screen, setScreen] = useState("home"), [registered, setRegistered] = useState(false), [checking, setChecking] = useState(true), [products, setProducts] = useState<Product[]>([]), [notice, setNotice] = useState(""), [companyId, setCompanyId] = useState<string | null>(null), [companyName, setCompanyName] = useState("Компания Workspace"), [registrationMessage, setRegistrationMessage] = useState(""), [registrationError, setRegistrationError] = useState(""), [submitting, setSubmitting] = useState(false);
   useEffect(() => {
     let active = true;
@@ -104,11 +105,72 @@ export default function Home() {
       setSubmitting(false);
     }
   }
+  async function logout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setNotice("");
+
+    if (supabase) {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) {
+        setNotice(`Кабинеттен шығу қатесі: ${error.message}`);
+        setLoggingOut(false);
+        return;
+      }
+    }
+
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("alsat-"))
+      .forEach((key) => localStorage.removeItem(key));
+    window.location.replace("/workspace-login");
+  }
   async function addProduct(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const product: Product = { id: Date.now(), name: String(data.get("name")), sku: String(data.get("sku")), price: Number(data.get("price")), stock: Number(data.get("stock")), commission: Number(data.get("commission")), workspace: data.get("workspace") === "on", agents: data.get("agents") === "on", marketplace: data.get("marketplace") === "on" }; if (supabase && companyId) await supabase.from("products").insert({ company_id: companyId, name: product.name, sku: product.sku, price: product.price, stock: product.stock, commission_rate: product.commission, workspace_active: product.workspace, agent_visible: product.agents, marketplace_published: product.marketplace }); setProducts([product, ...products]); event.currentTarget.reset(); setScreen("products"); setNotice(supabase && companyId ? "Тауар Supabase-ке сақталды" : "Тауар каталогқа қосылды"); }
   function toggle(id: number, field: "workspace" | "agents" | "marketplace") { const product = products.find((item) => item.id === id); if (!product) return; const value = !product[field]; setProducts(products.map((item) => item.id === id ? { ...item, [field]: value } : item)); if (supabase && companyId) { const column = field === "workspace" ? "workspace_active" : field === "agents" ? "agent_visible" : "marketplace_published"; void supabase.from("products").update({ [column]: value }).eq("id", id); } }
   if (checking) return <main className="workspace-checking"><Brand /><p>Workspace тексерілуде…</p></main>;
   if (!registered) return <Registration onSubmit={saveCompany} message={registrationMessage} error={registrationError} loading={submitting} />;
-  return <main className="shell"><aside className="sidebar"><Brand /><Link className="agent-switch" href="/agent">↗ СӨ кабинетін көру</Link><div className="role-links"><Link href="/dispatcher">Экспедитор кабинеті</Link><Link href="/warehouse">Қойма менеджері</Link><Link href="/admin">Alsat Admin</Link></div><nav>{nav.map(n => <button key={n.id} className={screen === n.id ? "nav active" : "nav"} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav><div className="sidebar-foot"><span className="avatar">{companyName[0] || "A"}</span><div><strong>{companyName}</strong><small>Компания әкімшісі</small></div></div></aside><section className="content"><header><div><p className="eyebrow">ALSAT WORKSPACE</p><h1>{screen === "home" ? `Қайырлы күн, ${companyName}` : nav.find(n => n.id === screen)?.label}</h1></div><button className="bell" onClick={() => setNotice("Жаңа хабарлама жоқ. Барлық дерек синхрондалды.")} aria-label="Хабарламалар">⌁</button></header>{notice && <div className="toast">✓ {notice}<button onClick={() => setNotice("")}>×</button></div>}{screen === "home" && <Dashboard products={products} stock={totalStock} onAdd={() => setScreen("create")} onOrders={() => setScreen("orders")} />}{screen === "products" && <Products products={products} onAdd={() => setScreen("create")} onToggle={toggle} />}{screen === "create" && <ProductForm onSubmit={addProduct} onCancel={() => setScreen("products")} />}{screen === "agents" && <Agents products={agentProducts} />}{screen === "orders" && <Orders products={agentProducts} />}{screen === "commissions" && <Commissions products={products} />}</section><nav className="mobile-nav">{nav.slice(0, 4).map(n => <button key={n.id} className={screen === n.id ? "active" : ""} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav><div className="supabase-status">{isSupabaseConfigured ? "● Нақты дерекқор" : "○ Баптау қажет"}</div></main>;
+  return (
+    <main className="shell">
+      <aside className="sidebar">
+        <Brand />
+        <Link className="agent-switch" href="/agent">↗ СӨ кабинетін көру</Link>
+        <div className="role-links">
+          <Link href="/dispatcher">Экспедитор кабинеті</Link>
+          <Link href="/warehouse">Қойма менеджері</Link>
+          <Link href="/admin">Alsat Admin</Link>
+        </div>
+        <nav>{nav.map(n => <button key={n.id} className={screen === n.id ? "nav active" : "nav"} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav>
+        <div className="sidebar-foot">
+          <div className="sidebar-user">
+            <span className="avatar">{companyName[0] || "A"}</span>
+            <div><strong>{companyName}</strong><small>Компания әкімшісі</small></div>
+          </div>
+          <button className="workspace-logout" type="button" onClick={logout} disabled={loggingOut}>
+            <span aria-hidden="true">↪</span>{loggingOut ? "Шығып жатыр…" : "Кабинеттен шығу"}
+          </button>
+        </div>
+      </aside>
+      <section className="content">
+        <header>
+          <div><p className="eyebrow">ALSAT WORKSPACE</p><h1>{screen === "home" ? `Қайырлы күн, ${companyName}` : nav.find(n => n.id === screen)?.label}</h1></div>
+          <div className="workspace-header-actions">
+            <button className="bell" onClick={() => setNotice("Жаңа хабарлама жоқ. Барлық дерек синхрондалды.")} aria-label="Хабарламалар">⌁</button>
+            <button className="mobile-workspace-logout" type="button" onClick={logout} disabled={loggingOut} aria-label="Кабинеттен шығу">
+              <span aria-hidden="true">↪</span>{loggingOut ? "Шығуда…" : "Шығу"}
+            </button>
+          </div>
+        </header>
+        {notice && <div className="toast">✓ {notice}<button onClick={() => setNotice("")}>×</button></div>}
+        {screen === "home" && <Dashboard products={products} stock={totalStock} onAdd={() => setScreen("create")} onOrders={() => setScreen("orders")} />}
+        {screen === "products" && <Products products={products} onAdd={() => setScreen("create")} onToggle={toggle} />}
+        {screen === "create" && <ProductForm onSubmit={addProduct} onCancel={() => setScreen("products")} />}
+        {screen === "agents" && <Agents products={agentProducts} />}
+        {screen === "orders" && <Orders products={agentProducts} />}
+        {screen === "commissions" && <Commissions products={products} />}
+      </section>
+      <nav className="mobile-nav">{nav.slice(0, 4).map(n => <button key={n.id} className={screen === n.id ? "active" : ""} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav>
+      <div className="supabase-status">{isSupabaseConfigured ? "● Нақты дерекқор" : "○ Баптау қажет"}</div>
+    </main>
+  );
 }
 function Brand(){ return <div className="brand"><span>А</span><b>alsat</b><em>workspace</em></div> }
 function Registration({onSubmit,message,error,loading}:{onSubmit:(e:FormEvent<HTMLFormElement>)=>void;message:string;error:string;loading:boolean}) { return <main className="registration"><section className="register-copy"><Brand /><div><p className="eyebrow">ALSAT WORKSPACE</p><h1>Сатуды бір жерден басқарыңыз</h1><p>Компания, каталог, сауда өкілдері және тапсырыстар — бір ыңғайлы workspace-та.</p></div><div className="feature-list"><span>✓ Тауарларды СӨ-ге бөлек ашу</span><span>✓ Marketplace-ке саналы жариялау</span><span>✓ Мобильді сауда ағыны</span></div></section><section className="register-card"><div><p className="eyebrow">НАҚТЫ WORKSPACE</p><h2>Компанияны тіркеу</h2><p>Компания мен әкімші аккаунтын бірге ашыңыз.</p></div><form onSubmit={onSubmit}><label>Компания атауы<input required placeholder="Мысалы, Kraus Electric" name="company" /></label><div className="two"><label>БСН<input placeholder="123456789012" name="bin" inputMode="numeric" /></label><label>Қала<input required placeholder="Алматы" name="city" /></label></div><div className="two"><label>Әкімшінің аты-жөні<input required placeholder="Нұрлан Әбдірахманов" name="fullName" /></label><label>Байланыс телефоны<input required placeholder="+7 700 000 00 00" name="phone" /></label></div><label>Email<input required type="email" placeholder="name@company.kz" name="email" autoComplete="email" /></label><label>Құпия сөз<input required type="password" minLength={8} placeholder="Кемінде 8 таңба" name="password" autoComplete="new-password" /></label>{message&&<div className="register-feedback success">✓ {message}<Link href="/workspace-login">Workspace-қа кіру →</Link></div>}{error&&<div className="register-feedback error">{error}</div>}<button className="primary full" disabled={loading}>{loading?"Workspace ашылуда…":"Workspace ашу"} <span>→</span></button></form><Link className="demo-entry register-login" href="/workspace-login">Аккаунтым бар — кіру →</Link><small>Бұл демо емес: компания Supabase-ке сақталып, сіз owner рөлін аласыз.</small></section></main> }

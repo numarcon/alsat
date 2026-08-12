@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import DriverNavigation from "../../components/DriverNavigation";
+import MapErrorBoundary from "../../components/MapErrorBoundary";
 import SignaturePad from "../../components/SignaturePad";
 import { supabase } from "../../lib/supabase";
 import { parsePickupQrValue } from "../../lib/warehouse-qr";
@@ -33,6 +34,39 @@ const stops: Stop[] = [
 ];
 const money = (value: number) => `${value.toLocaleString("kk-KZ")} ₸`;
 const warehouseCode = (index: number) => `ST-${100045 + index}`;
+const defaultCoordinates: [number, number] = [76.8897, 43.2383];
+
+function isValidCoordinates(value: unknown): value is [number, number] {
+  return Array.isArray(value)
+    && value.length === 2
+    && typeof value[0] === "number"
+    && typeof value[1] === "number"
+    && Number.isFinite(value[0])
+    && Number.isFinite(value[1])
+    && value[0] >= -180
+    && value[0] <= 180
+    && value[1] >= -85
+    && value[1] <= 85;
+}
+
+function sanitizeRouteOrder(value: unknown): RouteOrder | null {
+  if (!value || typeof value !== "object") return null;
+  const order = value as Partial<RouteOrder>;
+  if (typeof order.code !== "string" || !order.stop || typeof order.stop.name !== "string") return null;
+  const demoStop = stops.find((stop) => stop.name === order.stop?.name);
+  return {
+    ...order,
+    code: order.code.toUpperCase(),
+    stop: {
+      name: order.stop.name,
+      address: typeof order.stop.address === "string" ? order.stop.address : "Мекенжай көрсетілмеген",
+      time: typeof order.stop.time === "string" ? order.stop.time : "18:00",
+      distance: typeof order.stop.distance === "string" ? order.stop.distance : "Карта бойынша",
+      status: order.stop.status || "Жоспарда",
+      coordinates: isValidCoordinates(order.stop.coordinates) ? order.stop.coordinates : (demoStop?.coordinates ?? defaultCoordinates),
+    },
+  } as RouteOrder;
+}
 
 function demoRouteOrder(code: string): RouteOrder | undefined {
   const index = stops.findIndex((_, stopIndex) => code === warehouseCode(stopIndex));
@@ -53,7 +87,7 @@ function routeOrderFromRemote(row: RemoteRouteOrder, fallbackCode: string): Rout
       time: "18:00",
       distance: "Карта бойынша",
       status: "Жоспарда",
-      coordinates: hasCoordinates ? [Number(store?.longitude), Number(store?.latitude)] : (demoStop?.coordinates ?? [76.8897, 43.2383]),
+      coordinates: hasCoordinates && isValidCoordinates([Number(store?.longitude), Number(store?.latitude)]) ? [Number(store?.longitude), Number(store?.latitude)] : (demoStop?.coordinates ?? defaultCoordinates),
     },
     contactName: store?.contact_name || undefined,
     phone: store?.phone || undefined,
@@ -104,7 +138,7 @@ export default function DispatcherApp() {
       const savedRoutes = JSON.parse(localStorage.getItem("alsat-dispatcher-route-orders") ?? "[]");
       const delivered = JSON.parse(localStorage.getItem("alsat-dispatcher-delivered") ?? "[]");
       if (Array.isArray(accepted)) setAcceptedOrders(accepted.filter((item): item is string => typeof item === "string"));
-      if (Array.isArray(savedRoutes)) setRouteOrders(savedRoutes.filter((item): item is RouteOrder => Boolean(item && typeof item.code === "string" && item.stop?.name && Array.isArray(item.stop?.coordinates))));
+      if (Array.isArray(savedRoutes)) setRouteOrders(savedRoutes.map(sanitizeRouteOrder).filter((item): item is RouteOrder => Boolean(item)));
       if (Array.isArray(delivered)) setDeliveredOrders(delivered.filter((item): item is string => typeof item === "string"));
       setRouteStarted(localStorage.getItem("alsat-dispatcher-route-started") === "true");
     } catch {
@@ -358,7 +392,7 @@ function DispatcherRoute({ go, onSelect, started, routeOrders, deliveredOrders, 
     if (order) onSelect(order);
   };
   const canStart = routeOrders.length > 0;
-  return <section className="role-screen route-navigation-screen"><div className="role-heading"><h1>Бүгінгі маршрут</h1><button onClick={() => go("stops")}>☷</button></div><p className="role-muted">{canStart ? `${routeOrders.length} қабылданған тапсырыс · ${completedCount} жеткізілді` : "Алдымен қоймадағы тапсырыстарды қабылдаңыз"}</p>{!started ? <section className="delivery-start-card"><span className="delivery-start-icon">⌖</span><div><strong>Жеткізу бастауға дайынсыз ба?</strong><small>QR арқылы қабылданған дүкендер маршрутқа автоматты қосылды.</small></div><button disabled={!canStart} onClick={onStart}>Жеткізуді бастау　›</button></section> : <><div className="route-live-badge">●　GPS навигация белсенді <span>· {remainingOrders.length} нүкте қалды</span></div><DriverNavigation stops={remainingOrders.map((order) => ({ id: order.code, name: order.stop.name, address: order.stop.address, time: order.stop.time, coordinates: order.stop.coordinates }))} onOpenStop={openStop}/><div className="role-section-title"><h3>Маршрут нүктелері</h3><span>{completedCount}/{routeOrders.length}</span></div><div className="route-stop-list">{routeOrders.map((order, index) => { const complete = deliveredOrders.includes(order.code); return <button className="role-list-row" key={order.code} onClick={() => onSelect(order)}><span className={`stop-number ${complete ? "complete" : ""}`}>{complete ? "✓" : index + 1}</span><div><strong>{order.stop.name}</strong><small>{order.stop.time} дейін · {order.stop.distance}</small></div><em className={`status ${complete ? "green" : order.stop.status === "Күтуде" ? "yellow" : "blue"}`}>{complete ? "Жеткізілді" : index === completedCount ? "Келесі" : "Жоспарда"}</em></button>; })}</div></>}</section>;
+  return <section className="role-screen route-navigation-screen"><div className="role-heading"><h1>Бүгінгі маршрут</h1><button onClick={() => go("stops")}>☷</button></div><p className="role-muted">{canStart ? `${routeOrders.length} қабылданған тапсырыс · ${completedCount} жеткізілді` : "Алдымен қоймадағы тапсырыстарды қабылдаңыз"}</p>{!started ? <section className="delivery-start-card"><span className="delivery-start-icon">⌖</span><div><strong>Жеткізу бастауға дайынсыз ба?</strong><small>QR арқылы қабылданған дүкендер маршрутқа автоматты қосылды.</small></div><button disabled={!canStart} onClick={onStart}>Жеткізуді бастау　›</button></section> : <><div className="route-live-badge">●　GPS навигация белсенді <span>· {remainingOrders.length} нүкте қалды</span></div><MapErrorBoundary resetKey={remainingOrders.map((order) => `${order.code}:${order.stop.coordinates.join(",")}`).join("|")}><DriverNavigation stops={remainingOrders.map((order) => ({ id: order.code, name: order.stop.name, address: order.stop.address, time: order.stop.time, coordinates: order.stop.coordinates }))} onOpenStop={openStop}/></MapErrorBoundary><div className="role-section-title"><h3>Маршрут нүктелері</h3><span>{completedCount}/{routeOrders.length}</span></div><div className="route-stop-list">{routeOrders.map((order, index) => { const complete = deliveredOrders.includes(order.code); return <button className="role-list-row" key={order.code} onClick={() => onSelect(order)}><span className={`stop-number ${complete ? "complete" : ""}`}>{complete ? "✓" : index + 1}</span><div><strong>{order.stop.name}</strong><small>{order.stop.time} дейін · {order.stop.distance}</small></div><em className={`status ${complete ? "green" : order.stop.status === "Күтуде" ? "yellow" : "blue"}`}>{complete ? "Жеткізілді" : index === completedCount ? "Келесі" : "Жоспарда"}</em></button>; })}</div></>}</section>;
 }
 
 function DispatcherReceive({ go, acceptedOrders, routeOrders, initialCode, onAccept, onStart }: { go: (screen: Screen) => void; acceptedOrders: string[]; routeOrders: RouteOrder[]; initialCode: string; onAccept: (code: string) => Promise<PickupResult>; onStart: () => void }) {

@@ -142,10 +142,14 @@ export default function DriverNavigation({
   const [steps, setSteps] = useState<DirectionsStep[]>([]);
   const [arrivedAt, setArrivedAt] = useState<string | null>(null);
 
-  const nextStop = stops[0];
+  const navigableStops = useMemo(() => stops.filter((stop) => {
+    const [longitude, latitude] = stop.coordinates ?? [];
+    return Number.isFinite(longitude) && Number.isFinite(latitude) && longitude >= -180 && longitude <= 180 && latitude >= -85 && latitude <= 85;
+  }), [stops]);
+  const nextStop = navigableStops[0];
   const stopSignature = useMemo(
-    () => stops.map((stop) => `${stop.id}:${stop.coordinates.join(",")}`).join("|"),
-    [stops],
+    () => navigableStops.map((stop) => `${stop.id}:${stop.coordinates.join(",")}`).join("|"),
+    [navigableStops],
   );
   const origin = position?.coordinates ?? previewOrigin;
   const directDistance = nextStop ? distanceBetween(origin, nextStop.coordinates) : 0;
@@ -216,7 +220,7 @@ export default function DriverNavigation({
     const map = mapRef.current;
     if (!map || !mapReady) return;
     stopMarkersRef.current.forEach((marker) => marker.remove());
-    stopMarkersRef.current = stops.map((stop, index) => {
+    stopMarkersRef.current = navigableStops.map((stop, index) => {
       const element = document.createElement("button");
       element.type = "button";
       element.className = `nav-stop-marker${index === 0 ? " next" : ""}`;
@@ -228,7 +232,7 @@ export default function DriverNavigation({
         .setPopup(new mapboxgl.Popup({ offset: 22, closeButton: false }).setText(`${stop.name} · ${stop.address}`))
         .addTo(map);
     });
-  }, [mapReady, onOpenStop, stopSignature, stops]);
+  }, [mapReady, navigableStops, onOpenStop, stopSignature]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -244,12 +248,12 @@ export default function DriverNavigation({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!token || !map || !mapReady || stops.length === 0) return;
+    if (!token || !map || !mapReady || navigableStops.length === 0) return;
     const previous = lastRouteRef.current;
     if (previous?.signature === stopSignature && distanceBetween(previous.origin, origin) < 45) return;
     lastRouteRef.current = { origin, signature: stopSignature };
     const controller = new AbortController();
-    const coordinates = [origin, ...stops.slice(0, 24).map((stop) => stop.coordinates)]
+    const coordinates = [origin, ...navigableStops.slice(0, 24).map((stop) => stop.coordinates)]
       .map((coordinate) => coordinate.join(","))
       .join(";");
     const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coordinates}?alternatives=false&continue_straight=true&geometries=geojson&overview=full&steps=true&banner_instructions=true&access_token=${encodeURIComponent(token)}`;
@@ -261,50 +265,55 @@ export default function DriverNavigation({
         return data.routes[0];
       })
       .then((route) => {
-        const feature = {
-          type: "Feature" as const,
-          properties: {},
-          geometry: route.geometry,
-        };
-        const source = map.getSource("driver-route") as mapboxgl.GeoJSONSource | undefined;
-        if (source) source.setData(feature);
-        else {
-          map.addSource("driver-route", { type: "geojson", data: feature });
-          map.addLayer({
-            id: "driver-route-outline",
-            type: "line",
-            source: "driver-route",
-            layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.92 },
+        if (mapRef.current !== map) return;
+        try {
+          const feature = {
+            type: "Feature" as const,
+            properties: {},
+            geometry: route.geometry,
+          };
+          const source = map.getSource("driver-route") as mapboxgl.GeoJSONSource | undefined;
+          if (source) source.setData(feature);
+          else {
+            map.addSource("driver-route", { type: "geojson", data: feature });
+            map.addLayer({
+              id: "driver-route-outline",
+              type: "line",
+              source: "driver-route",
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.92 },
+            });
+            map.addLayer({
+              id: "driver-route-line",
+              type: "line",
+              source: "driver-route",
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: { "line-color": "#139748", "line-width": 5.5 },
+            });
+          }
+          const firstLeg = route.legs[0];
+          setSummary({
+            totalDistance: route.distance,
+            totalDuration: route.duration,
+            nextDistance: firstLeg?.distance ?? route.distance,
+            nextDuration: firstLeg?.duration ?? route.duration,
           });
-          map.addLayer({
-            id: "driver-route-line",
-            type: "line",
-            source: "driver-route",
-            layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": "#139748", "line-width": 5.5 },
-          });
-        }
-        const firstLeg = route.legs[0];
-        setSummary({
-          totalDistance: route.distance,
-          totalDuration: route.duration,
-          nextDistance: firstLeg?.distance ?? route.distance,
-          nextDuration: firstLeg?.duration ?? route.duration,
-        });
-        setSteps(firstLeg?.steps ?? []);
-        if (fittedRouteRef.current !== stopSignature) {
-          const bounds = new mapboxgl.LngLatBounds();
-          route.geometry.coordinates.forEach((coordinate) => bounds.extend(coordinate as [number, number]));
-          map.fitBounds(bounds, { padding: { top: 98, right: 44, bottom: 92, left: 44 }, maxZoom: 15, duration: 850 });
-          fittedRouteRef.current = stopSignature;
+          setSteps(firstLeg?.steps ?? []);
+          if (fittedRouteRef.current !== stopSignature) {
+            const bounds = new mapboxgl.LngLatBounds();
+            route.geometry.coordinates.forEach((coordinate) => bounds.extend(coordinate as [number, number]));
+            map.fitBounds(bounds, { padding: { top: 98, right: 44, bottom: 92, left: 44 }, maxZoom: 15, duration: 850 });
+            fittedRouteRef.current = stopSignature;
+          }
+        } catch (error) {
+          setRouteError(error instanceof Error ? error.message : "Картаға маршрутты шығару мүмкін болмады");
         }
       })
       .catch((error: Error) => {
         if (error.name !== "AbortError") setRouteError(error.message || "Маршрутты құру мүмкін болмады");
       });
     return () => controller.abort();
-  }, [mapReady, origin, stopSignature, stops, token]);
+  }, [mapReady, navigableStops, origin, stopSignature, token]);
 
   const centerOnDriver = () => {
     const map = mapRef.current;

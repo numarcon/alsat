@@ -63,10 +63,11 @@ export default function AgentApp() {
     const next = [order, ...orders];
     setOrders(next);
     localStorage.setItem("alsat-agent-orders", JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("alsat-agent-order-saved", { detail: order }));
     queueOfflineAction("order", order);
     setLastOrder(order);
     setSyncState("syncing");
-    void flushOrderQueue().then((result) => setSyncState(result.remaining ? "offline" : "synced"));
+    void flushOrderQueue().then((result) => { setSyncState(result.remaining ? "offline" : "synced"); window.dispatchEvent(new CustomEvent("alsat-agent-order-synced")); });
     setOrderSaved(true);
     setCart([]);
     go("detail");

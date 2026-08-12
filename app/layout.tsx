@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
+import "./roles.css";
 
 export const metadata: Metadata = { title: "Alsat Workspace", description: "Компаниялар мен сауда өкілдеріне арналған workspace", applicationName: "Alsat Workspace", manifest: "/manifest.webmanifest" };
 export const viewport: Viewport = { themeColor: "#0878f9", width: "device-width", initialScale: 1 };

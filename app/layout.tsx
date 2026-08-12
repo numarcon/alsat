@@ -5,4 +5,34 @@ import "./roles.css";
 
 export const metadata: Metadata = { title: "Alsat Workspace — сатуды бір жүйеде басқарыңыз", description: "Компания, сауда өкілі, қойма және жеткізуді біріктіретін Қазақстан бизнесіне арналған B2B workspace.", applicationName: "Alsat Workspace", manifest: "/manifest.webmanifest" };
 export const viewport: Viewport = { themeColor: "#0878f9", width: "device-width", initialScale: 1 };
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="kk"><body>{children}<Script id="pwa-runtime" strategy="afterInteractive">{"if (location.hostname === 'localhost') { navigator.serviceWorker?.getRegistrations().then(rs => rs.forEach(r => r.unregister())); caches?.keys().then(ks => ks.forEach(k => caches.delete(k))); } else if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }"}</Script></body></html>; }
+const pwaRuntime = `(() => {
+  const recoveryKey = "alsat-runtime-recovery-v5";
+  const messageOf = value => String(value?.message || value?.reason?.message || value?.reason || value || "");
+  const isStaleRuntime = value => /ChunkLoadError|Loading chunk|module factory is not available|Failed to fetch dynamically imported module/i.test(messageOf(value));
+  const clearRuntime = async () => {
+    await Promise.all([
+      navigator.serviceWorker?.getRegistrations().then(items => Promise.all(items.map(item => item.unregister()))),
+      globalThis.caches?.keys().then(keys => Promise.all(keys.map(key => caches.delete(key)))),
+    ]);
+  };
+  const recover = value => {
+    if (!isStaleRuntime(value) || sessionStorage.getItem(recoveryKey)) return;
+    sessionStorage.setItem(recoveryKey, "1");
+    clearRuntime().finally(() => location.reload());
+  };
+  addEventListener("error", event => recover(event.error || event.message), true);
+  addEventListener("unhandledrejection", event => recover(event), true);
+  if (location.hostname === "localhost") {
+    clearRuntime();
+    return;
+  }
+  if (!("serviceWorker" in navigator)) return;
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(registration => registration.update());
+})();`;
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="kk"><body>{children}<Script id="pwa-runtime" strategy="beforeInteractive">{pwaRuntime}</Script></body></html>; }

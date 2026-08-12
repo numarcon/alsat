@@ -5,6 +5,7 @@ import Link from "next/link";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 type LoginStep = "phone" | "otp";
+type LoginMode = "email" | "phone";
 
 function normalizePhone(value: string) {
   const digits = value.replace(/\D/g, "");
@@ -16,6 +17,9 @@ function normalizePhone(value: string) {
 export default function AgentLogin() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<LoginMode>("email");
   const [step, setStep] = useState<LoginStep>("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -83,6 +87,28 @@ export default function AgentLogin() {
     window.location.href = "/agent";
   }
 
+  async function signInWithEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    if (!email.trim() || !password) {
+      setError("Email және құпия сөзді енгізіңіз.");
+      return;
+    }
+    if (!supabase || !isSupabaseConfigured) {
+      window.location.href = "/agent";
+      return;
+    }
+    setLoading(true);
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    setLoading(false);
+    if (signInError) {
+      setError(signInError.message || "Email немесе құпия сөз қате.");
+      return;
+    }
+    window.location.href = "/agent";
+  }
+
   async function signInWithGoogle() {
     setError("");
     setMessage("");
@@ -114,8 +140,24 @@ export default function AgentLogin() {
         <p>Тапсырыстар, клиенттер және комиссиялар бір жерде.</p>
       </div>
 
-      <form onSubmit={step === "phone" ? requestOtp : verifyOtp}>
-        {step === "phone" ? (
+      <div className="login-methods">
+        <button type="button" className={mode === "email" ? "active" : ""} onClick={() => { setMode("email"); setStep("phone"); setError(""); setMessage(""); }}>Email</button>
+        <button type="button" className={mode === "phone" ? "active" : ""} onClick={() => { setMode("phone"); setStep("phone"); setError(""); setMessage(""); }}>Телефон / SMS</button>
+      </div>
+
+      <form onSubmit={mode === "email" ? signInWithEmail : step === "phone" ? requestOtp : verifyOtp}>
+        {mode === "email" ? (
+          <>
+            <label>
+              Email
+              <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nurlanqyzy2@gmail.com" type="email" autoComplete="email" required />
+            </label>
+            <label>
+              Құпия сөз
+              <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" type="password" autoComplete="current-password" required />
+            </label>
+          </>
+        ) : step === "phone" ? (
           <label>
             Телефон нөміріңіз
             <input
@@ -142,7 +184,7 @@ export default function AgentLogin() {
           </label>
         )}
         <button className="qmart-login-btn" type="submit" disabled={loading}>
-          {loading ? "Күте тұрыңыз…" : step === "phone" ? "SMS-код алу" : "Кіру"}
+          {loading ? "Күте тұрыңыз…" : mode === "email" ? "Кіру" : step === "phone" ? "SMS-код алу" : "Кіру"}
         </button>
       </form>
 

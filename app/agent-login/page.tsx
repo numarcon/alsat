@@ -104,8 +104,8 @@ export default function AgentLogin() {
   return (
     <main className="qmart-login">
       <div className="qmart-login-brand">
-        <span className="qmark">Q</span>
-        <b>QMART</b>
+        <span className="qmark">A</span>
+        <b>ALSAT</b>
         <small>САУДА ӨКІЛІ</small>
       </div>
 

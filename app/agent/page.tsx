@@ -74,7 +74,7 @@ export default function AgentApp() {
   };
 
   return <main className="qmart-suite">
-    <header className="suite-header"><button className="icon-button" onClick={() => go("more")}>☰</button><div className="suite-brand"><b>Qmart</b><small>САУДА ӨКІЛІ</small></div><button className="icon-button">♧</button></header>
+    <header className="suite-header"><button className="icon-button" onClick={() => go("more")}>☰</button><div className="suite-brand"><b>ALSAT</b><small>САУДА ӨКІЛІ</small></div><button className="icon-button">♧</button></header>
     {screen === "dashboard" && <Dashboard go={go} syncState={syncState} />}
     {screen === "clients" && <Clients go={go} onSelect={(name) => { setSelectedClient(name); go("client"); }} />}
     {screen === "client" && <ClientCard name={selectedClient} go={go} />}

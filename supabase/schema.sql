@@ -1,5 +1,5 @@
--- Run in Supabase SQL Editor after creating a project. RLS policies are intentionally
--- deferred until authentication roles are enabled.
+-- Run in Supabase SQL Editor after creating a project. Then run the migrations in
+-- supabase/migrations, including the multi-user workspace/RLS migration.
 create type public.product_visibility as enum ('workspace', 'agent', 'marketplace');
 create table public.companies (id uuid primary key default gen_random_uuid(), owner_id uuid references auth.users(id), name text not null, bin text, city text, phone text, created_at timestamptz default now());
 create table public.products (id uuid primary key default gen_random_uuid(), company_id uuid not null references public.companies(id) on delete cascade, name text not null, sku text, price numeric(12,2) not null default 0, stock integer not null default 0, commission_rate numeric(5,2) not null default 0, workspace_active boolean not null default true, agent_visible boolean not null default false, marketplace_published boolean not null default false, created_at timestamptz default now());

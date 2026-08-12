@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import RouteMap from "../../components/RouteMap";
+import { supabase } from "../../lib/supabase";
 
 type Screen = "dashboard" | "orders" | "detail" | "route" | "stops" | "scanner" | "receive" | "done" | "reports" | "notifications" | "vehicle" | "profile" | "fuel" | "documents" | "support" | "more";
 type Stop = { name: string; address: string; time: string; distance: string; status: "Жолда" | "Күтуде" | "Жоспарда" | "Жеткізілді"; coordinates: [number, number] };
@@ -24,6 +25,13 @@ export default function DispatcherApp() {
   const [delivered, setDelivered] = useState(false);
   const [acceptedOrders, setAcceptedOrders] = useState<string[]>([]);
   const [routeStarted, setRouteStarted] = useState(false);
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => { if (active && data.session) setLogged(true); });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { if (active && session) setLogged(true); });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
   const acceptWarehouseOrder = (rawCode: string) => {
     const normalized = rawCode.trim().toUpperCase().replace(/^QR[-\s]?/, "");
     const index = stops.findIndex((_, stopIndex) => normalized === warehouseCode(stopIndex) || normalized === `ALSAT-${100045 + stopIndex}` || normalized === String(100045 + stopIndex));

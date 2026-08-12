@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getRemoteOrderId, updateWarehouseOrder } from "../../lib/order-sync";
+import { supabase } from "../../lib/supabase";
 
 type Screen = "dashboard" | "products" | "product" | "receive" | "issue" | "stock" | "locations" | "inventory" | "orders" | "order" | "notifications" | "reports" | "profile" | "scanner" | "transfer" | "return" | "offline" | "more";
 type Product = { name: string; sku: string; stock: number; price: number; state: "Қолжетімді" | "Аз қалды" | "Төмен"; icon: string };
@@ -31,6 +32,13 @@ export default function WarehouseApp() {
   const [orders, setOrders] = useState<WarehouseOrder[]>(initialOrders);
   const [selectedOrderId, setSelectedOrderId] = useState<string>(initialOrders[0].id);
   const selectedOrder = useMemo(() => orders.find((order) => order.id === selectedOrderId) ?? orders[0], [orders, selectedOrderId]);
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => { if (active && data.session) setLogged(true); });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { if (active && session) setLogged(true); });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
   useEffect(() => {
     const saved = localStorage.getItem("alsat-warehouse-orders");
     if (saved) { try { setOrders(JSON.parse(saved)); } catch { localStorage.removeItem("alsat-warehouse-orders"); } }

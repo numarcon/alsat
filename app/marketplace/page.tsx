@@ -42,7 +42,7 @@ function normalizeProduct(row: Record<string, unknown>): CatalogProduct {
     stock: Math.max(0, Number(row.stock || 0)),
     category: String(row.marketplace_category || "Электр тауарлары"),
     description: String(row.marketplace_description || "Alsat Marketplace каталогындағы тауар."),
-    imageUrl: typeof row.marketplace_image_url === "string" ? row.marketplace_image_url : "",
+    imageUrl: typeof row.marketplace_image_url === "string" ? row.marketplace_image_url : typeof row.image_url === "string" ? row.image_url : "",
     minOrder: Math.max(1, Number(row.marketplace_min_order || 1)),
   };
 }
@@ -87,7 +87,7 @@ export default function MarketplacePage() {
       if (!supabase) { setLoading(false); return; }
       const result = await supabase
         .from("products")
-        .select("id,company_id,name,sku,price,stock,marketplace_title,marketplace_description,marketplace_category,marketplace_image_url,marketplace_min_order")
+        .select("id,company_id,name,sku,price,stock,marketplace_title,marketplace_description,marketplace_category,marketplace_image_url,image_url,marketplace_min_order")
         .eq("workspace_active", true)
         .eq("marketplace_published", true)
         .gt("stock", 0)

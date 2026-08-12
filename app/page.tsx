@@ -136,6 +136,7 @@ export default function Home() {
         <div className="role-links">
           <Link href="/dispatcher">Экспедитор кабинеті</Link>
           <Link href="/warehouse">Қойма менеджері</Link>
+          <Link href="/marketplace">Alsat Marketplace</Link>
           <Link href="/admin">Alsat Admin</Link>
         </div>
         <nav>{nav.map(n => <button key={n.id} className={screen === n.id ? "nav active" : "nav"} onClick={() => setScreen(n.id)}><i>{n.icon}</i>{n.label}</button>)}</nav>

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type Screen = "dashboard" | "products" | "product" | "receive" | "issue" | "stock" | "locations" | "inventory" | "orders" | "notifications" | "reports" | "profile" | "scanner" | "transfer" | "return" | "offline" | "more";
+type Screen = "dashboard" | "products" | "product" | "receive" | "issue" | "stock" | "locations" | "inventory" | "orders" | "order" | "notifications" | "reports" | "profile" | "scanner" | "transfer" | "return" | "offline" | "more";
 type Product = { name: string; sku: string; stock: number; price: number; state: "Қолжетімді" | "Аз қалды" | "Төмен"; icon: string };
+type OrderStatus = "new" | "picking" | "ready" | "labeled" | "shipped";
+type WarehouseOrder = { id: string; store: string; address: string; total: number; createdAt: string; status: OrderStatus; items: { name: string; quantity: number; price: number }[]; sticker?: string; waybill?: string };
 const products: Product[] = [
   { name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", stock: 1250, price: 650, state: "Қолжетімді", icon: "◌" },
   { name: "KRAUSZ Проектор 100W 6500K IP65", sku: "KLZ-FL-100W-6500", stock: 320, price: 8500, state: "Аз қалды", icon: "▣" },
@@ -12,13 +14,43 @@ const products: Product[] = [
   { name: "KRAUSZ Розетка 2P+E 16A Белая", sku: "KLZ-SKT-2P-E-16A", stock: 890, price: 490, state: "Қолжетімді", icon: "⊙" },
 ];
 const money = (value: number) => `${value.toLocaleString("kk-KZ")} ₸`;
+const statusLabel: Record<OrderStatus, string> = { new: "Қоймаға түсті", picking: "Жинауда", ready: "Дайын", labeled: "Құжаттары бекітілді", shipped: "Жөнелтілді" };
+const orderStatusClass: Record<OrderStatus, string> = { new: "blue", picking: "yellow", ready: "green", labeled: "green", shipped: "green" };
+const initialOrders: WarehouseOrder[] = [
+  { id: "№100045", store: "Строймаг", address: "Алматы қ., Райымбек 348", total: 245000, createdAt: "12.05.2024 · 10:30", status: "new", items: [{ name: products[0].name, quantity: 10, price: 650 }, { name: products[1].name, quantity: 2, price: 8500 }, { name: products[2].name, quantity: 5, price: 4200 }] },
+  { id: "№100046", store: "ЭлектроДом", address: "Алматы қ., Төле би 215", total: 185000, createdAt: "12.05.2024 · 11:15", status: "picking", items: [{ name: products[0].name, quantity: 20, price: 650 }, { name: products[4].name, quantity: 12, price: 490 }] },
+  { id: "№100047", store: "Техносвет", address: "Алматы қ., Абай 68", total: 92000, createdAt: "12.05.2024 · 12:00", status: "ready", items: [{ name: products[2].name, quantity: 8, price: 4200 }] },
+  { id: "№100048", store: "Светлый дом", address: "Алматы қ., Сайын 22", total: 70000, createdAt: "12.05.2024 · 13:00", status: "labeled", sticker: "ST-100048", waybill: "НК-100048", items: [{ name: products[3].name, quantity: 5, price: 5200 }] },
+];
 
 export default function WarehouseApp() {
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [logged, setLogged] = useState(false);
   const [selected, setSelected] = useState(products[0]);
+  const [orders, setOrders] = useState<WarehouseOrder[]>(initialOrders);
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(initialOrders[0].id);
+  const selectedOrder = useMemo(() => orders.find((order) => order.id === selectedOrderId) ?? orders[0], [orders, selectedOrderId]);
+  useEffect(() => {
+    const saved = localStorage.getItem("alsat-warehouse-orders");
+    if (saved) { try { setOrders(JSON.parse(saved)); } catch { localStorage.removeItem("alsat-warehouse-orders"); } }
+    const agentOrders = localStorage.getItem("alsat-agent-orders");
+    if (agentOrders) {
+      try {
+        const incoming = JSON.parse(agentOrders) as Array<{ id: string; client: string; total: number; createdAt: string; items: Array<{ name: string; price: number }> }>;
+        setOrders((current) => {
+          const additions = incoming.filter((item) => !current.some((order) => order.id === item.id)).map((item) => ({ id: item.id, store: item.client, address: "Мекенжайы тапсырыстан алынады", total: item.total, createdAt: item.createdAt, status: "new" as OrderStatus, items: item.items.map((line) => ({ name: line.name, quantity: 1, price: line.price })) }));
+          const next = [...additions, ...current];
+          localStorage.setItem("alsat-warehouse-orders", JSON.stringify(next));
+          return next;
+        });
+      } catch { /* Ignore an incomplete offline order payload. */ }
+    }
+  }, []);
+  useEffect(() => { if (logged) localStorage.setItem("alsat-warehouse-orders", JSON.stringify(orders)); }, [orders, logged]);
   if (!logged) return <WarehouseLogin onLogin={() => setLogged(true)} />;
   const go = (next: Screen) => setScreen(next);
+  const openOrder = (order: WarehouseOrder) => { setSelectedOrderId(order.id); go("order"); };
+  const updateOrder = (patch: Partial<WarehouseOrder>) => { if (!selectedOrder) return; setOrders((current) => current.map((order) => order.id === selectedOrder.id ? { ...order, ...patch } : order)); };
   return <main className="qmart-role warehouse-shell">
     <header className="role-header"><button onClick={() => go("more")}>☰</button><div><b>QMART</b><small>ҚОЙМА МЕНЕДЖЕРІ</small></div><button onClick={() => go("notifications")}>♧</button></header>
     {screen === "dashboard" && <WarehouseDashboard go={go} />}
@@ -29,7 +61,8 @@ export default function WarehouseApp() {
     {screen === "stock" && <WarehouseStock go={go} />}
     {screen === "locations" && <WarehouseLocations go={go} />}
     {screen === "inventory" && <Inventory go={go} />}
-    {screen === "orders" && <WarehouseOrders go={go} />}
+    {screen === "orders" && <WarehouseOrders orders={orders} go={go} onSelect={openOrder} />}
+    {screen === "order" && selectedOrder && <WarehouseOrderDetail order={selectedOrder} go={go} updateOrder={updateOrder} />}
     {screen === "notifications" && <WarehouseNotifications go={go} />}
     {screen === "reports" && <WarehouseReports go={go} />}
     {screen === "profile" && <WarehouseProfile go={go} />}
@@ -50,7 +83,26 @@ function WarehouseOperation({ type, go }: { type: "receive" | "issue"; go: (scre
 function WarehouseStock({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><div className="role-heading"><button className="back" onClick={() => go("products")}>‹</button><h1>Қалдықтар</h1><button>⌖</button></div><input className="role-input" placeholder="⌕　Іздеу"/><div className="stock-summary"><span><small>Барлық тауар</small><b>1 256</b></span><span><small>Жалпы қалдық</small><b>3 456</b></span><span><small>Құндылығы</small><b>2 450 800 ₸</b></span></div><div className="role-tabs"><button className="active">Барлығы</button><button>Аз қалған</button><button>Қозғалмай тұрған</button></div>{products.slice(0, 4).map((product) => <div className="warehouse-product stock-product" key={product.sku}><span className="warehouse-product-icon">{product.icon}</span><div><strong>{product.name}</strong><small>{product.stock} дана</small></div><b>{money(product.stock * product.price)}</b></div>)}</section> }
 function WarehouseLocations({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><div className="role-heading"><button className="back" onClick={() => go("products")}>‹</button><h1>Склад картасы</h1><span/></div><input className="role-input" placeholder="⌕　Орналасуды іздеу"/><div className="role-tabs"><button className="active">Барлығы</button><button>A қоймасы</button><button>B қоймасы</button><button>C қоймасы</button></div><h3 className="warehouse-label">A қоймасы</h3><div className="location-grid">{["A-01-01","A-01-02","A-01-03","A-01-04","A-02-01","A-02-02","A-02-03","A-02-04","A-03-01","A-03-02","A-03-03","A-03-04"].map((item, index) => <button className={index === 1 || index === 7 ? "occupied" : ""} key={item}>{item}</button>)}</div><h3 className="warehouse-label">B қоймасы</h3><div className="location-grid">{["B-01-01","B-01-02","B-01-03","B-01-04","B-02-01","B-02-02","B-02-03","B-02-04"].map((item) => <button key={item}>{item}</button>)}</div></section> }
 function Inventory({ go }: { go: (screen: Screen) => void }) { const [done, setDone] = useState(false); return <section className="role-screen"><div className="role-heading"><button className="back" onClick={() => go("stock")}>‹</button><h1>Қалдық санау</h1><button>⌁</button></div><div className="role-tabs"><button className="active">Жаңа санау</button><button>Тарих</button></div><div className="detail-card operation-form"><Info label="Санау түрі" value="Толық санау"/><Info label="Қойма" value="A қоймасы"/><Info label="Орындаушылар" value="Барлығы"/><Info label="Басталу күні" value="12.05.2024"/></div><div className="inventory-summary"><span>Тауарлар<b>1 256</b></span><span>Саналған<b>245</b></span><span>Сәйкестік<b>98%</b></span></div><button className="role-primary" onClick={() => setDone(true)}>{done ? "Санау басталды" : "Санауды бастау"}</button></section> }
-function WarehouseOrders({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><div className="role-heading"><h1>Тапсырыстар</h1><button>⌕</button></div><input className="role-input" placeholder="⌕　Іздеу"/><div className="role-tabs"><button className="active">Барлығы</button><button>Жаңа</button><button>Жинақталуда</button><button>Жөнелтілді</button></div>{["Строймаг","ЭлектроДом","Техносвет","1000 Мелочей"].map((name, index) => <button className="role-list-row" key={name} onClick={() => go("issue")}><span className="list-icon">♧</span><div><strong>S01003{index + 2} · {name}</strong><small>12.05.2024 · {index + 10}:30</small></div><div className="role-row-right"><b>{[78000,125000,92000,45000][index].toLocaleString("kk-KZ")} ₸</b><em className={`status ${index === 0 ? "blue" : index === 1 ? "yellow" : "green"}`}>{index === 0 ? "Жинақталуда" : index === 1 ? "Жаңа" : "Жөнелтілді"}</em></div></button>)}</section> }
+function WarehouseOrders({ orders, go, onSelect }: { orders: WarehouseOrder[]; go: (screen: Screen) => void; onSelect: (order: WarehouseOrder) => void }) {
+  const [filter, setFilter] = useState<OrderStatus | "all">("all");
+  const visible = filter === "all" ? orders : orders.filter((order) => order.status === filter);
+  return <section className="role-screen"><div className="role-heading"><h1>Тапсырыстар</h1><button onClick={() => go("scanner")}>⌕</button></div><p className="role-muted">СӨ өкілдерінен түскен тапсырыстарды қабылдап, жинауды басқарыңыз.</p><div className="role-tabs"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Барлығы {orders.length}</button><button className={filter === "new" ? "active" : ""} onClick={() => setFilter("new")}>Қоймаға түсті</button><button className={filter === "picking" ? "active" : ""} onClick={() => setFilter("picking")}>Жинауда</button><button className={filter === "ready" ? "active" : ""} onClick={() => setFilter("ready")}>Дайын</button></div>{visible.length ? visible.map((order) => <button className="role-list-row" key={order.id} onClick={() => onSelect(order)}><span className="list-icon">♧</span><div><strong>{order.id} · {order.store}</strong><small>{order.address}<br/>{order.createdAt} · {order.items.length} позиция</small></div><div className="role-row-right"><b>{money(order.total)}</b><em className={`status ${orderStatusClass[order.status]}`}>{statusLabel[order.status]}</em></div></button>) : <div className="empty">Бұл сүзгіде тапсырыс жоқ</div>}</section>
+}
+
+function WarehouseOrderDetail({ order, go, updateOrder }: { order: WarehouseOrder; go: (screen: Screen) => void; updateOrder: (patch: Partial<WarehouseOrder>) => void }) {
+  const [sticker, setSticker] = useState(order.sticker ?? "");
+  const [waybill, setWaybill] = useState(order.waybill ?? "");
+  const steps: Array<{ key: OrderStatus; label: string }> = [{ key: "new", label: "Қоймаға түсті" }, { key: "picking", label: "Жинауға кірістім" }, { key: "ready", label: "Жинау аяқталды" }, { key: "labeled", label: "Стикер және накладной" }, { key: "shipped", label: "Жөнелтілді" }];
+  const currentIndex = steps.findIndex((step) => step.key === order.status);
+  const advance = () => {
+    if (order.status === "new") updateOrder({ status: "picking" });
+    else if (order.status === "picking") updateOrder({ status: "ready" });
+    else if (order.status === "ready" && sticker.trim() && waybill.trim()) updateOrder({ status: "labeled", sticker: sticker.trim(), waybill: waybill.trim() });
+    else if (order.status === "labeled") updateOrder({ status: "shipped" });
+  };
+  const actionLabel = order.status === "new" ? "Қабылдадым, жинауға кірістім" : order.status === "picking" ? "Жинау аяқталды — дайын" : order.status === "ready" ? "Стикер және накладной бекіту" : order.status === "labeled" ? "Жөнелтуге беру" : "Тапсырыс аяқталды";
+  return <section className="role-screen"><div className="role-heading"><button className="back" onClick={() => go("orders")}>‹</button><h1>{order.id}</h1><button>⌯</button></div><div className="order-detail-head"><div><span className={`status ${orderStatusClass[order.status]}`}>{statusLabel[order.status]}</span><h2>{order.store}</h2><small>{order.address}</small></div><b>{money(order.total)}</b></div><div className="workflow">{steps.map((step, index) => <div className={`workflow-step ${index < currentIndex ? "done" : ""} ${index === currentIndex ? "active" : ""}`} key={step.key}><span>{index < currentIndex ? "✓" : index + 1}</span><div><strong>{step.label}</strong><small>{index === 0 ? "СӨ тапсырысы автоматты түсті" : index === 1 ? "Қоймашы жинауды бастайды" : index === 2 ? "Барлық позиция жиналды" : index === 3 ? "Стикер және накладной қосылады" : "Экспедиторға берілді"}</small></div></div>)}</div><div className="role-section-title"><h3>Тауарлар ({order.items.length})</h3><button onClick={() => go("products")}>Қоймадан көру</button></div><div className="detail-card product-lines">{order.items.map((item) => <span key={item.name}>{item.name}<b>{item.quantity} × {money(item.price)}</b></span>)}<strong>Жалпы сома <b>{money(order.total)}</b></strong></div>{order.status === "ready" && <div className="document-card"><h3>Жөнелтуге дайындау</h3><p>Жиналған қораптың сыртына стикер жапсырып, накладнойды үстіне қойыңыз.</p><label>Стикер нөмірі<input value={sticker} onChange={(event) => setSticker(event.target.value)} placeholder="Мысалы: ST-100047" /></label><label>Накладной нөмірі<input value={waybill} onChange={(event) => setWaybill(event.target.value)} placeholder="Мысалы: НК-100047" /></label><div className="document-checks"><span>☐ Стикер жапсырылды</span><span>☐ Накладной қойылды</span></div></div>}{order.status === "labeled" && <div className="document-card success-card"><strong>✓ Құжаттар дайын</strong><span>Стикер: {order.sticker}</span><span>Накладной: {order.waybill}</span></div>}<button className="role-primary" onClick={advance} disabled={order.status === "shipped" || (order.status === "ready" && (!sticker.trim() || !waybill.trim()))}>{actionLabel}</button>{order.status === "ready" && (!sticker.trim() || !waybill.trim()) && <small className="form-hint">Алдымен стикер және накладной нөмірін енгізіңіз.</small>}</section>
+}
 function WarehouseNotifications({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><div className="role-heading"><h1>Хабарламалар</h1><button>•••</button></div>{["Қалдық аз қалды", "Тауар қабылданды", "Санау аяқталды", "Тапсырыс дайын"].map((name, index) => <div className="notification-row" key={name}><span className={`notification-icon n${index}`}>●</span><div><strong>{name}</strong><small>{index === 0 ? "KRAUSZ Проектор 100W қоймада аз қалды" : "Операция сәтті сақталды"}</small><em>12.05.2024 · 10:30</em></div>{index < 2 && <b>•</b>}</div>)}<button className="role-primary" onClick={() => go("dashboard")}>Барлығын оқу</button></section> }
 function WarehouseReports({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><div className="role-heading"><h1>Есеп</h1><button>•••</button></div>{["Қалдық есебі", "Қозғалыс есебі", "Тауарлардың қозғалысы", "Қабылдау есебі", "Шығару есебі", "Қалдық бойынша ABC талдау", "Қоймадағы тұрған тауарлар"].map((name) => <button className="setting-row role-setting" key={name} onClick={() => go("stock")}>▣　{name}<b>›</b></button>)}</section> }
 function WarehouseProfile({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><div className="role-heading"><button onClick={() => go("more")}>⚙</button><h1>Профиль</h1><span/></div><div className="profile-card role-profile-card"><span className="role-avatar large">НӘ</span><h1>Нұрлан Әбілрахманов</h1><p>Қойма менеджері</p><strong>n.abdirakhmanov@qmart.kz</strong></div>{["Профильді өңдеу", "Қоймалар", "Пайдаланушылар", "Құрылғы баптаулары", "Тіл　　　　　　　 Қазақша", "Қолдау қызметі"].map((item, index) => <button className="setting-row role-setting" key={item} onClick={() => index === 5 ? go("notifications") : undefined}>{item}<b>›</b></button>)}<button className="logout" onClick={() => go("dashboard")}>⇥　Шығу</button></section> }

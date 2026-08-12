@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import RouteMap from "../../components/RouteMap";
 import { queueOfflineAction } from "../../lib/offline-queue";
 import { supabase } from "../../lib/supabase";
+import { flushOrderQueue } from "../../lib/order-sync";
 
 type Screen = "dashboard" | "clients" | "client" | "catalog" | "order" | "orders" | "detail" | "route" | "visit" | "reports" | "profile" | "more";
 type Product = { id: number; name: string; subtitle: string; price: number; stock: number };
 type OrderRecord = { id: string; client: string; total: number; status: string; createdAt: string; items: Product[] };
+type SyncState = "idle" | "syncing" | "synced" | "offline";
 
 const products: Product[] = [
   { id: 1, name: "KRAUSZ Шам A60 12W E27", subtitle: "6500K", price: 650, stock: 1250 },
@@ -32,12 +34,25 @@ export default function AgentApp() {
   const [orderSaved, setOrderSaved] = useState(false);
   const [orders, setOrders] = useState<OrderRecord[]>(initialOrders);
   const [lastOrder, setLastOrder] = useState<OrderRecord | null>(null);
+  const [syncState, setSyncState] = useState<SyncState>("idle");
   const total = useMemo(() => cart.reduce((sum, item) => sum + item.price, 0), [cart]);
   useEffect(() => {
     const saved = localStorage.getItem("alsat-agent-orders");
     if (saved) {
       try { setOrders(JSON.parse(saved)); } catch { localStorage.removeItem("alsat-agent-orders"); }
     }
+  }, []);
+  useEffect(() => {
+    let mounted = true;
+    const flush = async () => {
+      if (!mounted) return;
+      setSyncState("syncing");
+      const result = await flushOrderQueue();
+      if (mounted) setSyncState(result.remaining ? "offline" : result.synced ? "synced" : "idle");
+    };
+    void flush();
+    window.addEventListener("online", flush);
+    return () => { mounted = false; window.removeEventListener("online", flush); };
   }, []);
   const go = (next: Screen) => setScreen(next);
   const add = (product: Product) => setCart((current) => [...current, product]);
@@ -50,6 +65,8 @@ export default function AgentApp() {
     localStorage.setItem("alsat-agent-orders", JSON.stringify(next));
     queueOfflineAction("order", order);
     setLastOrder(order);
+    setSyncState("syncing");
+    void flushOrderQueue().then((result) => setSyncState(result.remaining ? "offline" : "synced"));
     setOrderSaved(true);
     setCart([]);
     go("detail");
@@ -57,7 +74,7 @@ export default function AgentApp() {
 
   return <main className="qmart-suite">
     <header className="suite-header"><button className="icon-button" onClick={() => go("more")}>☰</button><div className="suite-brand"><b>Qmart</b><small>САУДА ӨКІЛІ</small></div><button className="icon-button">♧</button></header>
-    {screen === "dashboard" && <Dashboard go={go} />}
+    {screen === "dashboard" && <Dashboard go={go} syncState={syncState} />}
     {screen === "clients" && <Clients go={go} onSelect={(name) => { setSelectedClient(name); go("client"); }} />}
     {screen === "client" && <ClientCard name={selectedClient} go={go} />}
     {screen === "catalog" && <Catalog products={products} cart={cart} add={add} go={go} />}
@@ -73,7 +90,10 @@ export default function AgentApp() {
   </main>;
 }
 
-function Dashboard({ go }: { go: (screen: Screen) => void }) { return <section className="suite-screen"><div className="profile-strip"><span className="person">А</span><div><strong>Нұрлан Әбілрахманов</strong><small>Сауда өкілі</small></div><b>♧</b></div><section className="metric-card"><small>Бүгінгі көрсеткіштер</small><p>12 мамыр, жексенбі</p><div className="metrics"><span>Тапсырыс<strong>1 245 000 ₸</strong><em>+12%</em></span><span>Клиенттер<strong>24</strong><em>+3</em></span><span>Жаңа клиент<strong>3</strong><em>+3</em></span><span>Орташа чек<strong>51 875 ₸</strong><em>›</em></span></div></section><SectionTitle title="Жылдам әрекеттер"/><div className="quick-actions"><button onClick={() => go("order")}>▣<span>Тапсырыс қосу</span></button><button onClick={() => go("clients")}>♙<span>Клиент қосу</span></button><button onClick={() => go("catalog")}>▦<span>Тауарлар</span></button><button onClick={() => go("route")}>⌖<span>Маршрут</span></button><button onClick={() => go("reports")}>▥<span>Есептер</span></button><button onClick={() => go("catalog")}>▧<span>Қойма қалдығы</span></button></div><SectionTitle title="Соңғы тапсырыстар" action="Барлығын көру ›" onClick={() => go("orders")}/><OrderMini number="№10045" name="Строймаг" amount="245 000 ₸" status="Жаңа тапсырыс"/><OrderMini number="№10044" name="ЭлектроДом" amount="185 000 ₸" status="Жеткізуге дайын"/><OrderMini number="№10043" name="Техносвет" amount="315 000 ₸" status="Жеткізілді"/></section> }
+function Dashboard({ go, syncState }: { go: (screen: Screen) => void; syncState: SyncState }) {
+  const syncLabel = syncState === "syncing" ? "Синхрондалып жатыр" : syncState === "synced" ? "Supabase-пен синхрондалды" : syncState === "offline" ? "Offline кезегі" : "Дерек дайын";
+  return <section className="suite-screen"><div className="profile-strip"><span className="person">А</span><div><strong>Нұрлан Әбілрахманов</strong><small>Сауда өкілі</small></div><span className={`sync-dot ${syncState}`} title={syncLabel}>●</span></div><div className={`sync-status ${syncState}`}>{syncLabel}</div><section className="metric-card"><small>Бүгінгі көрсеткіштер</small><p>12 мамыр, жексенбі</p><div className="metrics"><span>Тапсырыс<strong>1 245 000 ₸</strong><em>+12%</em></span><span>Клиенттер<strong>24</strong><em>+3</em></span><span>Жаңа клиент<strong>3</strong><em>+3</em></span><span>Орташа чек<strong>51 875 ₸</strong><em>›</em></span></div></section><SectionTitle title="Жылдам әрекеттер"/><div className="quick-actions"><button onClick={() => go("order")}>▣<span>Тапсырыс қосу</span></button><button onClick={() => go("clients")}>♙<span>Клиент қосу</span></button><button onClick={() => go("catalog")}>▦<span>Тауарлар</span></button><button onClick={() => go("route")}>⌖<span>Маршрут</span></button><button onClick={() => go("reports")}>▥<span>Есептер</span></button><button onClick={() => go("catalog")}>▧<span>Қойма қалдығы</span></button></div><SectionTitle title="Соңғы тапсырыстар" action="Барлығын көру ›" onClick={() => go("orders")}/><OrderMini number="№10045" name="Строймаг" amount="245 000 ₸" status="Жаңа тапсырыс"/><OrderMini number="№10044" name="ЭлектроДом" amount="185 000 ₸" status="Жеткізуге дайын"/><OrderMini number="№10043" name="Техносвет" amount="315 000 ₸" status="Жеткізілді"/></section>
+}
 function SectionTitle({ title, action, onClick }: { title: string; action?: string; onClick?: () => void }) { return <div className="section-title"><h3>{title}</h3>{action && <button onClick={onClick}>{action}</button>}</div> }
 function OrderMini({ number, name, amount, status }: { number: string; name: string; amount: string; status: string }) { return <div className="order-mini"><span>▣</span><div><strong>{number} – {name}</strong><small>12.05.2024 · <i>{status}</i></small></div><b>{amount}</b></div> }
 function Clients({ go, onSelect }: { go: (screen: Screen) => void; onSelect: (name: string) => void }) {

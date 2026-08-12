@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { isSupabaseConfigured } from "../lib/supabase";
+import { supabase } from "../lib/supabase";
 
 type Product = { id: number; name: string; sku: string; price: number; stock: number; commission: number; workspace: boolean; agents: boolean; marketplace: boolean };
 const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
@@ -9,13 +10,13 @@ const starter: Product[] = [{ id: 1, name: "Кабель ВВГнг 3×2.5", sku
 const nav = [{ id: "home", icon: "⌂", label: "Басты бет" }, { id: "products", icon: "▦", label: "Тауарлар" }, { id: "agents", icon: "◉", label: "Сауда өкілдері" }, { id: "orders", icon: "▤", label: "Тапсырыстар" }, { id: "commissions", icon: "₸", label: "Комиссиялар" }];
 
 export default function Home() {
-  const [screen, setScreen] = useState("home"), [registered, setRegistered] = useState(false), [products, setProducts] = useState<Product[]>(starter), [notice, setNotice] = useState(""), [agentMode, setAgentMode] = useState(false);
-  useEffect(() => { setRegistered(localStorage.getItem("alsat-company") === "1"); const saved = localStorage.getItem("alsat-products"); if (saved) setProducts(JSON.parse(saved)); }, []);
+  const [screen, setScreen] = useState("home"), [registered, setRegistered] = useState(false), [products, setProducts] = useState<Product[]>(starter), [notice, setNotice] = useState(""), [agentMode, setAgentMode] = useState(false), [companyId, setCompanyId] = useState<string | null>(null);
+  useEffect(() => { setRegistered(localStorage.getItem("alsat-company") === "1"); setCompanyId(localStorage.getItem("alsat-company-id")); const saved = localStorage.getItem("alsat-products"); if (saved) setProducts(JSON.parse(saved)); }, []);
   useEffect(() => { if (registered) localStorage.setItem("alsat-products", JSON.stringify(products)); }, [products, registered]);
   const agentProducts = products.filter(p => p.workspace && p.agents);
   const totalStock = products.reduce((n, p) => n + p.stock, 0);
-  function saveCompany(event: FormEvent<HTMLFormElement>) { event.preventDefault(); localStorage.setItem("alsat-company", "1"); setRegistered(true); setNotice("Компания workspace-ы ашылды"); }
-  function addProduct(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const product: Product = { id: Date.now(), name: String(data.get("name")), sku: String(data.get("sku")), price: Number(data.get("price")), stock: Number(data.get("stock")), commission: Number(data.get("commission")), workspace: data.get("workspace") === "on", agents: data.get("agents") === "on", marketplace: data.get("marketplace") === "on" }; setProducts([product, ...products]); event.currentTarget.reset(); setScreen("products"); setNotice("Тауар каталогқа қосылды"); }
+  async function saveCompany(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); let id: string | null = null; if (supabase) { const { data: row } = await supabase.from("companies").insert({ name: String(data.get("company")), bin: String(data.get("bin") || ""), city: String(data.get("city")), phone: String(data.get("phone")) }).select("id").single(); id = row?.id ?? null; } if (id) { localStorage.setItem("alsat-company-id", id); setCompanyId(id); } localStorage.setItem("alsat-company", "1"); setRegistered(true); setNotice(id ? "Компания Supabase-ке сақталды" : "Компания workspace-ы ашылды"); }
+  async function addProduct(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const product: Product = { id: Date.now(), name: String(data.get("name")), sku: String(data.get("sku")), price: Number(data.get("price")), stock: Number(data.get("stock")), commission: Number(data.get("commission")), workspace: data.get("workspace") === "on", agents: data.get("agents") === "on", marketplace: data.get("marketplace") === "on" }; if (supabase && companyId) await supabase.from("products").insert({ company_id: companyId, name: product.name, sku: product.sku, price: product.price, stock: product.stock, commission_rate: product.commission, workspace_active: product.workspace, agent_visible: product.agents, marketplace_published: product.marketplace }); setProducts([product, ...products]); event.currentTarget.reset(); setScreen("products"); setNotice(supabase && companyId ? "Тауар Supabase-ке сақталды" : "Тауар каталогқа қосылды"); }
   function toggle(id: number, field: "workspace" | "agents" | "marketplace") { setProducts(products.map(p => p.id === id ? { ...p, [field]: !p[field] } : p)); }
   if (!registered) return <Registration onSubmit={saveCompany} onDemo={() => { localStorage.setItem("alsat-company", "1"); setRegistered(true); }} />;
   if (agentMode) return <AgentCabinet products={agentProducts} onExit={() => setAgentMode(false)} />;

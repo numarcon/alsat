@@ -12,6 +12,7 @@ const nav = [{ id: "home", icon: "⌂", label: "Басты бет" }, { id: "pro
 export default function Home() {
   const [screen, setScreen] = useState("home"), [registered, setRegistered] = useState(false), [products, setProducts] = useState<Product[]>(starter), [notice, setNotice] = useState(""), [agentMode, setAgentMode] = useState(false), [companyId, setCompanyId] = useState<string | null>(null);
   useEffect(() => { setRegistered(localStorage.getItem("alsat-company") === "1"); setCompanyId(localStorage.getItem("alsat-company-id")); const saved = localStorage.getItem("alsat-products"); if (saved) setProducts(JSON.parse(saved)); }, []);
+  useEffect(() => { if (!supabase || !companyId) return; supabase.from("products").select("id,name,sku,price,stock,commission_rate,workspace_active,agent_visible,marketplace_published").eq("company_id", companyId).order("created_at", { ascending: false }).then(({ data }) => { if (data?.length) setProducts(data.map(p => ({ id: p.id, name: p.name, sku: p.sku ?? "", price: Number(p.price), stock: p.stock, commission: Number(p.commission_rate), workspace: p.workspace_active, agents: p.agent_visible, marketplace: p.marketplace_published }))); }); }, [companyId]);
   useEffect(() => { if (registered) localStorage.setItem("alsat-products", JSON.stringify(products)); }, [products, registered]);
   const agentProducts = products.filter(p => p.workspace && p.agents);
   const totalStock = products.reduce((n, p) => n + p.stock, 0);

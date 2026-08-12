@@ -100,7 +100,7 @@ export default function AgentApp() {
     {screen === "dashboard" && <Dashboard go={go} syncState={syncState} />}
     {screen === "clients" && <Clients clients={storeNames} go={go} onAdd={() => go("new-store")} onSelect={(name) => { setSelectedClient(name); go("client"); }} />}
     {screen === "new-store" && <NewStoreForm onCancel={() => go("clients")} onSave={addStore} />}
-    {screen === "client" && <ClientCard name={selectedClient} go={go} />}
+    {screen === "client" && <ClientCard name={selectedClient} orders={orders} go={go} />}
     {screen === "catalog" && <Catalog products={products} cart={cart} add={add} go={go} />}
     {screen === "order" && <OrderForm products={products} cart={cart} total={total} client={selectedClient} remove={remove} go={go} onSave={saveOrder} />}
     {screen === "orders" && <Orders orders={orders} go={go} onSelect={(order) => { setSelectedClient(order.client); setOrderSaved(order.status !== "Жаңа"); setLastOrder(order); setCart(order.items); go("detail"); }} />}
@@ -140,7 +140,57 @@ function NewStoreForm({ onCancel, onSave }: { onCancel: () => void; onSave: (sto
   };
   return <section className="suite-screen new-store-screen"><button className="back-link" onClick={onCancel}>‹ Клиенттер</button><div className="screen-heading"><div><p className="overline">СӨ КАБИНЕТІ</p><h1>Жаңа дүкен</h1></div><span className="new-store-mark">+</span></div><p className="store-form-intro">Дүкен туралы ақпаратты енгізіңіз. Картадағы нүкте кейін экспедитор маршрутына автоматты қосылады.</p><form className="store-form" onSubmit={submit}><label>Дүкен атауы *<input name="name" placeholder="Мысалы, Строймаг" required autoFocus /></label><label>Мекенжайы *<input name="address" placeholder="Алматы қ., Райымбек 348" required /></label><label>Байланыс тұлғасы<input name="contact" placeholder="Алексей, директор" /></label><label>Телефон нөмірі<input name="phone" placeholder="+7 777 123 45 67" type="tel" /></label><LocationPicker value={location} onChange={(value) => { setLocation(value); setLocationError(""); }} />{locationError && <p className="location-error">{locationError}</p>}<div className="store-form-actions"><button type="button" onClick={onCancel}>Болдырмау</button><button className="save-order" type="submit">Дүкенді сақтау　→</button></div></form></section>
 }
-function ClientCard({ name, go }: { name: string; go: (screen: Screen) => void }) { return <section className="suite-screen"><button className="back-link" onClick={() => go("clients")}>‹ Клиенттер</button><div className="client-card-head"><div><span className="tag">Белсенді клиент</span><h1>{name}</h1><small>ЖШС · Алматы қ., Райымбек 348<br/>+7 777 123 45 67<br/>Жауапты: Нұрлан Ә.</small></div><button className="icon-button dark">✎</button></div><div className="client-actions"><button onClick={() => go("order")}>▣<small>Тапсырыс</small></button><button>⌕<small>Қоңырау</small></button><button onClick={() => go("route")}>⌖<small>Маршрут</small></button><button onClick={() => go("more")}>•••<small>Көбірек</small></button></div><div className="tabs"><button className="active">Ақпарат</button><button>Тапсырыстар</button><button>Төлемдер</button><button>Ескертпелер</button></div><div className="info-card"><InfoRow label="Борышы" value="120 000 ₸"/><InfoRow label="Жалпы сатып алу" value="5 450 000 ₸"/><InfoRow label="Соңғы тапсырыс" value="12.05.2024"/><InfoRow label="Төлем түрі" value="Несие (14 күн)"/><InfoRow label="Жеңілдік" value="5%"/><InfoRow label="Лимит" value="1 000 000 ₸"/></div><div className="info-card"><strong>Байланыс тұлға</strong><InfoRow label="Алексей · Директор" value="+7 777 987 65 43"/><strong>Мекенжай</strong><InfoRow label="Негізгі" value="Алматы қ., Райымбек 348"/></div></section> }
+function ClientCard({ name, orders, go }: { name: string; orders: OrderRecord[]; go: (screen: Screen) => void }) {
+  const [tab, setTab] = useState<"info" | "orders" | "payments" | "notes">("info");
+  const [notes, setNotes] = useState<string[]>([]);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [payments, setPayments] = useState<Array<{ id: number; amount: number; method: string; date: string }>>([]);
+  const clientOrders = orders.filter((order) => order.client === name);
+
+  useEffect(() => {
+    const notesKey = `alsat-client-notes-${encodeURIComponent(name)}`;
+    const paymentsKey = `alsat-client-payments-${encodeURIComponent(name)}`;
+    try { setNotes(JSON.parse(localStorage.getItem(notesKey) || "[]")); } catch { setNotes([]); }
+    try { setPayments(JSON.parse(localStorage.getItem(paymentsKey) || "[]")); } catch { setPayments([]); }
+    setTab("info");
+  }, [name]);
+
+  const saveNote = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = noteDraft.trim();
+    if (!value) return;
+    const next = [`${value} · ${new Date().toLocaleDateString("kk-KZ")}`, ...notes];
+    setNotes(next);
+    localStorage.setItem(`alsat-client-notes-${encodeURIComponent(name)}`, JSON.stringify(next));
+    setNoteDraft("");
+  };
+
+  const savePayment = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const amount = Number(form.get("amount"));
+    if (!amount || amount < 1) return;
+    const next = [{ id: Date.now(), amount, method: String(form.get("method") || "Қолма-қол"), date: new Date().toLocaleDateString("kk-KZ") }, ...payments];
+    setPayments(next);
+    localStorage.setItem(`alsat-client-payments-${encodeURIComponent(name)}`, JSON.stringify(next));
+    event.currentTarget.reset();
+  };
+
+  return <section className="suite-screen">
+    <button className="back-link" onClick={() => go("clients")}>‹ Клиенттер</button>
+    <div className="client-card-head"><div><span className="tag">Белсенді клиент</span><h1>{name}</h1><small>ЖШС · Алматы қ., Райымбек 348<br/>+7 777 123 45 67<br/>Жауапты: Нұрлан Ә.</small></div><button className="icon-button dark">✎</button></div>
+    <div className="client-actions"><button onClick={() => go("order")}>▣<small>Тапсырыс</small></button><button onClick={() => window.location.href = "tel:+77771234567"}>⌕<small>Қоңырау</small></button><button onClick={() => go("route")}>⌖<small>Маршрут</small></button><button onClick={() => go("more")}>•••<small>Көбірек</small></button></div>
+    <div className="tabs client-tabs"><button className={tab === "info" ? "active" : ""} onClick={() => setTab("info")}>Ақпарат</button><button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Тапсырыстар</button><button className={tab === "payments" ? "active" : ""} onClick={() => setTab("payments")}>Төлемдер</button><button className={tab === "notes" ? "active" : ""} onClick={() => setTab("notes")}>Ескертпелер</button></div>
+
+    {tab === "info" && <div className="client-tab-panel"><div className="info-card"><InfoRow label="Борышы" value="120 000 ₸"/><InfoRow label="Жалпы сатып алу" value="5 450 000 ₸"/><InfoRow label="Соңғы тапсырыс" value="12.05.2024"/><InfoRow label="Төлем түрі" value="Несие (14 күн)"/><InfoRow label="Жеңілдік" value="5%"/><InfoRow label="Лимит" value="1 000 000 ₸"/></div><div className="info-card"><strong>Байланыс тұлға</strong><InfoRow label="Алексей · Директор" value="+7 777 987 65 43"/><strong>Мекенжай</strong><InfoRow label="Негізгі" value="Алматы қ., Райымбек 348"/></div></div>}
+
+    {tab === "orders" && <div className="client-tab-panel"><div className="tab-panel-heading"><div><strong>Дүкен тапсырыстары</strong><small>{clientOrders.length} тапсырыс</small></div><button onClick={() => go("order")}>＋ Жаңа</button></div>{clientOrders.length ? clientOrders.map((order) => <button className="client-history-row" key={order.id} onClick={() => go("orders")}><span>▣</span><div><strong>{order.id}</strong><small>{order.createdAt} · {order.items.length} тауар</small></div><div><b>{money(order.total)}</b><em>{order.status}</em></div></button>) : <div className="empty client-empty">Бұл дүкенде тапсырыс жоқ.<button onClick={() => go("order")}>Алғашқы тапсырысты қосу</button></div>}</div>}
+
+    {tab === "payments" && <div className="client-tab-panel"><div className="info-card payment-summary"><InfoRow label="Ағымдағы борыш" value="120 000 ₸"/><InfoRow label="Соңғы төлемдер" value={money(payments.reduce((sum, payment) => sum + payment.amount, 0))}/></div><form className="client-inline-form" onSubmit={savePayment}><label>Төлем сомасы<input name="amount" type="number" min="1" placeholder="50 000" required /></label><label>Төлем түрі<select name="method"><option>Қолма-қол</option><option>Аударым</option><option>Карта</option></select></label><button className="save-order" type="submit">Төлемді қосу</button></form>{payments.length ? payments.map((payment) => <div className="payment-row" key={payment.id}><span>₸</span><div><strong>{money(payment.amount)}</strong><small>{payment.method} · {payment.date}</small></div><em>Қабылданды</em></div>) : <div className="empty client-empty">Төлем тарихы бос</div>}</div>}
+
+    {tab === "notes" && <div className="client-tab-panel"><form className="note-form" onSubmit={saveNote}><label>Жаңа ескертпе<textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="Клиент туралы ескертпе жазыңыз..." required /></label><button className="save-order" type="submit">Ескертпені сақтау</button></form>{notes.length ? notes.map((note, index) => <div className="note-row" key={`${note}-${index}`}><span>✎</span><p>{note}</p></div>) : <div className="empty client-empty">Ескертпе жоқ</div>}</div>}
+  </section>;
+}
 function InfoRow({ label, value }: { label: string; value: string }) { return <div className="info-row"><span>{label}</span><b>{value}</b></div> }
 function Catalog({ products, cart, add, go }: { products: Product[]; cart: Product[]; add: (product: Product) => void; go: (screen: Screen) => void }) {
   const [query, setQuery] = useState("");

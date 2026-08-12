@@ -44,9 +44,15 @@ export async function syncOrderPayload(order: SyncableOrder) {
 
   const createdAt = order.createdAt ? new Date(order.createdAt) : null;
   const createdAtValue = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.toISOString() : undefined;
+  let storeId: string | undefined;
+  if (order.client?.trim()) {
+    const { data: store } = await supabase.from("stores").select("id").eq("company_id", companyId).eq("name", order.client.trim()).limit(1).maybeSingle();
+    if (store?.id) storeId = store.id;
+  }
 
   const { data: remoteOrder, error: orderError } = await supabase.from("orders").insert({
     company_id: companyId,
+    ...(storeId ? { store_id: storeId } : {}),
     status: order.status === "Жаңа" ? "draft" : "submitted",
     warehouse_status: "new",
     total: Number(order.total || 0),

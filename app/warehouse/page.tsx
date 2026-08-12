@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
 import { getRemoteOrderId, updateWarehouseOrder } from "../../lib/order-sync";
 import { supabase } from "../../lib/supabase";
+import { buildPickupQrValue } from "../../lib/warehouse-qr";
 
 type Screen = "dashboard" | "products" | "product" | "receive" | "issue" | "stock" | "locations" | "inventory" | "orders" | "order" | "notifications" | "reports" | "profile" | "scanner" | "transfer" | "return" | "offline" | "more";
 type Product = { name: string; sku: string; stock: number; price: number; state: "Қолжетімді" | "Аз қалды" | "Төмен"; icon: string };
 type OrderStatus = "new" | "picking" | "ready" | "labeled" | "shipped";
 type WarehouseOrder = { id: string; remoteId?: string; store: string; address: string; total: number; createdAt: string; status: OrderStatus; items: { name: string; quantity: number; price: number }[]; sticker?: string; waybill?: string; stickerAttached?: boolean; waybillPlaced?: boolean };
+type RemoteWarehouseOrder = { id: string; total: number | string; created_at: string; warehouse_status: string | null; sticker_code: string | null; waybill_number: string | null; stores: { name: string; address: string | null } | Array<{ name: string; address: string | null }> | null; order_items: Array<{ quantity: number; unit_price: number | string; products: { name: string } | Array<{ name: string }> | null }> };
 const products: Product[] = [
   { name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", stock: 1250, price: 650, state: "Қолжетімді", icon: "◌" },
   { name: "KRAUSZ Проектор 100W 6500K IP65", sku: "KLZ-FL-100W-6500", stock: 320, price: 8500, state: "Аз қалды", icon: "▣" },
@@ -16,7 +19,7 @@ const products: Product[] = [
   { name: "KRAUSZ Розетка 2P+E 16A Белая", sku: "KLZ-SKT-2P-E-16A", stock: 890, price: 490, state: "Қолжетімді", icon: "⊙" },
 ];
 const money = (value: number) => `${value.toLocaleString("kk-KZ")} ₸`;
-const statusLabel: Record<OrderStatus, string> = { new: "Қоймаға түсті", picking: "Жинауда", ready: "Дайын", labeled: "Құжаттары бекітілді", shipped: "Жөнелтілді" };
+const statusLabel: Record<OrderStatus, string> = { new: "Қоймаға түсті", picking: "Жинауда", ready: "Дайын", labeled: "Экспедиторға дайын", shipped: "Экспедитор алып кетті" };
 const orderStatusClass: Record<OrderStatus, string> = { new: "blue", picking: "yellow", ready: "green", labeled: "green", shipped: "green" };
 const initialOrders: WarehouseOrder[] = [
   { id: "№100045", store: "Строймаг", address: "Алматы қ., Райымбек 348", total: 245000, createdAt: "12.05.2024 · 10:30", status: "new", items: [{ name: products[0].name, quantity: 10, price: 650 }, { name: products[1].name, quantity: 2, price: 8500 }, { name: products[2].name, quantity: 5, price: 4200 }] },
@@ -39,6 +42,55 @@ export default function WarehouseApp() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { if (active && session) setLogged(true); });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
+  useEffect(() => {
+    const client = supabase;
+    if (!logged || !client) return;
+    const companyId = localStorage.getItem("alsat-company-id");
+    if (!companyId || !/^[0-9a-f-]{36}$/i.test(companyId)) return;
+    let active = true;
+
+    const loadRemoteOrders = async () => {
+      const { data, error } = await client
+        .from("orders")
+        .select("id,total,created_at,warehouse_status,sticker_code,waybill_number,stores(name,address),order_items(quantity,unit_price,products(name))")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (!active || error || !data) return;
+
+      const remoteOrders = (data as unknown as RemoteWarehouseOrder[]).map((row) => {
+        const store = Array.isArray(row.stores) ? row.stores[0] : row.stores;
+        const status = (["new", "picking", "ready", "labeled", "shipped"] as const).includes(row.warehouse_status as OrderStatus)
+          ? row.warehouse_status as OrderStatus
+          : "new";
+        return {
+          id: `№${row.id.slice(0, 8).toUpperCase()}`,
+          remoteId: row.id,
+          store: store?.name ?? "Клиент тапсырысы",
+          address: store?.address ?? "Мекенжай тапсырыстан алынады",
+          total: Number(row.total),
+          createdAt: new Date(row.created_at).toLocaleString("kk-KZ", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+          status,
+          sticker: row.sticker_code ?? undefined,
+          waybill: row.waybill_number ?? undefined,
+          stickerAttached: status === "labeled" || status === "shipped",
+          waybillPlaced: status === "labeled" || status === "shipped",
+          items: row.order_items.map((line, index) => {
+            const product = Array.isArray(line.products) ? line.products[0] : line.products;
+            return { name: product?.name ?? `Тауар позициясы ${index + 1}`, quantity: line.quantity, price: Number(line.unit_price) };
+          }),
+        } satisfies WarehouseOrder;
+      });
+      setOrders((current) => [...remoteOrders, ...current.filter((order) => !order.remoteId)]);
+    };
+
+    void loadRemoteOrders();
+    const channel = client
+      .channel(`warehouse-orders-${companyId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `company_id=eq.${companyId}` }, () => { void loadRemoteOrders(); })
+      .subscribe();
+    return () => { active = false; void client.removeChannel(channel); };
+  }, [logged]);
   useEffect(() => {
     const saved = localStorage.getItem("alsat-warehouse-orders");
     if (saved) { try { setOrders(JSON.parse(saved)); } catch { localStorage.removeItem("alsat-warehouse-orders"); } }
@@ -67,7 +119,19 @@ export default function WarehouseApp() {
       } catch { /* Ignore an incomplete offline order payload. */ }
     };
     const hydrateRemoteIds = () => setOrders((current) => current.map((order) => order.remoteId ? order : { ...order, remoteId: getRemoteOrderId(order.id) }));
-    const onStorage = (event: StorageEvent) => { if (event.key === "alsat-agent-orders") mergeIncomingOrder(event.newValue); if (event.key === "alsat-remote-order-map") hydrateRemoteIds(); };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "alsat-agent-orders") mergeIncomingOrder(event.newValue);
+      if (event.key === "alsat-remote-order-map") hydrateRemoteIds();
+      if (event.key === "alsat-warehouse-orders" && event.newValue) {
+        try {
+          const changed = JSON.parse(event.newValue) as WarehouseOrder[];
+          setOrders((current) => current.map((order) => {
+            const updated = changed.find((candidate) => candidate.id === order.id);
+            return updated ? { ...order, status: updated.status, sticker: updated.sticker, waybill: updated.waybill } : order;
+          }));
+        } catch { /* Ignore an incomplete handoff cache update. */ }
+      }
+    };
     const onAgentOrder = (event: Event) => { const detail = (event as CustomEvent).detail; if (detail) mergeIncomingOrder(JSON.stringify([detail])); };
     const onAgentOrderSynced = () => hydrateRemoteIds();
     window.addEventListener("storage", onStorage);
@@ -152,10 +216,11 @@ function WarehouseLoginAlsat({ onLogin }: { onLogin: () => void }) { return <mai
 
 function escapePrintText(value: string) { return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character); }
 
-function printWarehouseDocument(kind: "sticker" | "waybill", order: WarehouseOrder, sticker: string, waybill: string) {
+async function printWarehouseDocument(kind: "sticker" | "waybill", order: WarehouseOrder, sticker: string, waybill: string) {
   if (typeof window === "undefined") return;
   const popup = window.open("", "_blank", "width=760,height=900");
   if (!popup) return;
+  const qrDataUrl = await QRCode.toDataURL(buildPickupQrValue(sticker, order.remoteId), { width: 360, margin: 1, errorCorrectionLevel: "M", color: { dark: "#102a25", light: "#ffffff" } });
   const safeOrder = escapePrintText(order.id);
   const safeStore = escapePrintText(order.store);
   const safeAddress = escapePrintText(order.address);
@@ -163,23 +228,34 @@ function printWarehouseDocument(kind: "sticker" | "waybill", order: WarehouseOrd
   const safeWaybill = escapePrintText(waybill);
   const items = order.items.map((item) => `<tr><td>${escapePrintText(item.name)}</td><td>${item.quantity}</td><td>${escapePrintText(money(item.price))}</td></tr>`).join("");
   const content = kind === "sticker"
-    ? `<article class="sticker"><div class="brand">QMART <small>ALSAT WAREHOUSE</small></div><h1>${safeStore}</h1><strong class="code">${safeSticker}</strong><p>${safeOrder}</p><p>${safeAddress}</p><hr/><b>${order.items.length} позиция · ${escapePrintText(money(order.total))}</b></article>`
+    ? `<article class="sticker"><div class="brand">ALSAT <small>ҚОЙМА · ЖӨНЕЛТУ СТИКЕРІ</small></div><h1>${safeStore}</h1><img class="qr" src="${qrDataUrl}" alt="${safeSticker} QR"/><strong class="code">${safeSticker}</strong><p>${safeOrder}</p><p>${safeAddress}</p><hr/><b>${order.items.length} позиция · ${escapePrintText(money(order.total))}</b><small class="hint">Экспедитор осы QR кодты сканерлеп қабылдайды</small></article>`
     : `<article class="waybill"><div class="brand">ALSAT <small>WAREHOUSE WAYBILL</small></div><h1>Накладной</h1><div class="meta"><b>${safeWaybill}</b><span>${safeOrder}</span></div><p><b>Клиент:</b> ${safeStore}</p><p><b>Мекенжай:</b> ${safeAddress}</p><table><thead><tr><th>Тауар</th><th>Саны</th><th>Бағасы</th></tr></thead><tbody>${items}</tbody><tfoot><tr><th colSpan="2">Жалпы сома</th><th>${escapePrintText(money(order.total))}</th></tr></tfoot></table><div class="signatures"><span>Қоймашы: __________________</span><span>Экспедитор: ________________</span></div></article>`;
-  popup.document.write(`<!doctype html><html lang="kk"><head><meta charset="utf-8"/><title>${kind === "sticker" ? safeSticker : safeWaybill}</title><style>@page{margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#102a25;margin:0;padding:18px}.brand{font-weight:800;letter-spacing:2px;color:#159345}.brand small{display:block;font-size:9px;letter-spacing:1px;color:#6b7b73;margin-top:4px}.sticker{width:280px;border:2px solid #102a25;border-radius:12px;padding:22px;text-align:center;margin:0 auto}.sticker h1{font-size:22px;margin:25px 0 10px}.sticker p{font-size:11px;margin:7px 0}.sticker .code{display:block;font-size:26px;letter-spacing:2px;margin:18px 0}.sticker hr{border:0;border-top:1px solid #cad8cf;margin:18px 0}.waybill{max-width:760px;margin:0 auto}.waybill h1{font-size:24px;margin:28px 0 12px}.meta{display:flex;justify-content:space-between;border:1px solid #cad8cf;border-radius:8px;padding:12px;margin-bottom:18px}.meta b{color:#159345}.waybill p{font-size:13px;margin:8px 0}table{width:100%;border-collapse:collapse;margin-top:22px;font-size:12px}th,td{border:1px solid #cad8cf;padding:9px;text-align:left}th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:right}.signatures{display:flex;justify-content:space-between;margin-top:70px;font-size:11px}@media print{body{padding:0}}</style></head><body>${content}</body></html>`);
+  popup.document.write(`<!doctype html><html lang="kk"><head><meta charset="utf-8"/><title>${kind === "sticker" ? safeSticker : safeWaybill}</title><style>@page{margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#102a25;margin:0;padding:18px}.brand{font-weight:800;letter-spacing:2px;color:#159345}.brand small{display:block;font-size:9px;letter-spacing:1px;color:#6b7b73;margin-top:4px}.sticker{width:300px;border:2px solid #102a25;border-radius:12px;padding:22px;text-align:center;margin:0 auto}.sticker h1{font-size:22px;margin:20px 0 12px}.sticker .qr{display:block;width:190px;height:190px;margin:0 auto}.sticker p{font-size:11px;margin:7px 0}.sticker .code{display:block;font-size:24px;letter-spacing:1.5px;margin:10px 0 16px}.sticker hr{border:0;border-top:1px solid #cad8cf;margin:18px 0}.sticker .hint{display:block;margin-top:13px;color:#6b7b73;font-size:8px;line-height:1.4}.waybill{max-width:760px;margin:0 auto}.waybill h1{font-size:24px;margin:28px 0 12px}.meta{display:flex;justify-content:space-between;border:1px solid #cad8cf;border-radius:8px;padding:12px;margin-bottom:18px}.meta b{color:#159345}.waybill p{font-size:13px;margin:8px 0}table{width:100%;border-collapse:collapse;margin-top:22px;font-size:12px}th,td{border:1px solid #cad8cf;padding:9px;text-align:left}th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:right}.signatures{display:flex;justify-content:space-between;margin-top:70px;font-size:11px}@media print{body{padding:0}}</style></head><body>${content}</body></html>`);
   popup.document.close();
-  popup.document.body.innerHTML = popup.document.body.innerHTML.replaceAll("QMART", "ALSAT").replaceAll("Qmart", "Alsat");
   popup.focus();
   popup.onafterprint = () => popup.close();
-  popup.print();
+  window.setTimeout(() => popup.print(), 250);
+}
+
+function WarehouseQrPreview({ order, sticker }: { order: WarehouseOrder; sticker: string }) {
+  const [source, setSource] = useState("");
+  useEffect(() => {
+    let active = true;
+    QRCode.toDataURL(buildPickupQrValue(sticker, order.remoteId), { width: 260, margin: 1, errorCorrectionLevel: "M", color: { dark: "#102a25", light: "#ffffff" } })
+      .then((value) => { if (active) setSource(value); })
+      .catch(() => { if (active) setSource(""); });
+    return () => { active = false; };
+  }, [order.remoteId, sticker]);
+  return <div className="warehouse-qr-preview">{source ? <img src={source} alt={`${sticker} QR коды`} /> : <span>QR дайындалуда…</span>}<div><small>ҚОРАПҚА ЖАБЫСТЫРЫЛАДЫ</small><strong>{sticker}</strong><p>Экспедитор сканерлегенде қабылдау автоматты расталады.</p></div></div>;
 }
 
 function WarehouseDocumentActions({ order, sticker, waybill }: { order: WarehouseOrder; sticker: string; waybill: string }) {
   const buttonStyle = { border: "1px solid #b8dfc0", background: "#effaf1", color: "#159345", borderRadius: 8, padding: "9px 10px", fontSize: 10, cursor: "pointer" } as const;
-  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><button style={buttonStyle} onClick={() => printWarehouseDocument("sticker", order, sticker, waybill)}>Стикерді басып шығару</button><button style={buttonStyle} onClick={() => printWarehouseDocument("waybill", order, sticker, waybill)}>Накладнойды басып шығару</button></div>;
+  return <><WarehouseQrPreview order={order} sticker={sticker}/><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><button style={buttonStyle} onClick={() => { void printWarehouseDocument("sticker", order, sticker, waybill); }}>QR стикерді басып шығару</button><button style={buttonStyle} onClick={() => { void printWarehouseDocument("waybill", order, sticker, waybill); }}>Накладнойды басып шығару</button></div></>;
 }
 
 function WarehouseOrderDetailWithPrint({ order, go, updateOrder }: { order: WarehouseOrder; go: (screen: Screen) => void; updateOrder: (patch: Partial<WarehouseOrder>) => void }) {
-  const documentNumber = order.id.replace(/\D/g, "").slice(-6).padStart(6, "0");
+  const documentNumber = order.remoteId ? order.remoteId.slice(0, 8).toUpperCase() : order.id.replace(/\D/g, "").slice(-6).padStart(6, "0");
   const sticker = order.sticker ?? `ST-${documentNumber}`;
   const waybill = order.waybill ?? `НК-${documentNumber}`;
   const [stickerAttached, setStickerAttached] = useState(order.stickerAttached ?? false);
@@ -190,10 +266,21 @@ function WarehouseOrderDetailWithPrint({ order, go, updateOrder }: { order: Ware
     if (order.status === "new") updateOrder({ status: "picking" });
     else if (order.status === "picking") updateOrder({ status: "ready", sticker, waybill });
     else if (order.status === "ready" && stickerAttached && waybillPlaced) updateOrder({ status: "labeled", sticker, waybill, stickerAttached, waybillPlaced });
-    else if (order.status === "labeled") updateOrder({ status: "shipped" });
+    else if (order.status === "labeled") window.alert("Бұл тапсырыс экспедиторға дайын. Күйі экспедитор қораптағы QR кодты сканерлегенде автоматты өзгереді.");
   };
-  const actionLabel = order.status === "new" ? "Қабылдадым, жинауға кірістім" : order.status === "picking" ? "Жинау аяқталды — дайын" : order.status === "ready" ? "Стикер және накладной бекіту" : order.status === "labeled" ? "Жөнелтуге беру" : "Тапсырыс аяқталды";
-  return <section className="role-screen"><div className="role-heading"><button className="back" onClick={() => go("orders")}>‹</button><h1>{order.id}</h1><button>⌯</button></div><div className="order-detail-head"><div><span className={`status ${orderStatusClass[order.status]}`}>{statusLabel[order.status]}</span><h2>{order.store}</h2><small>{order.address}</small></div><b>{money(order.total)}</b></div><div className="workflow">{steps.map((step, index) => <div className={`workflow-step ${index < currentIndex ? "done" : ""} ${index === currentIndex ? "active" : ""}`} key={step.key}><span>{index < currentIndex ? "✓" : index + 1}</span><div><strong>{step.label}</strong><small>{index === 0 ? "СӨ тапсырысы автоматты түсті" : index === 1 ? "Қоймашы жинауды бастайды" : index === 2 ? "Барлық позиция жиналды" : index === 3 ? "Стикер және накладной дайын" : "Экспедиторға берілді"}</small></div></div>)}</div><div className="role-section-title"><h3>Тауарлар ({order.items.length})</h3><button onClick={() => go("products")}>Қоймадан көру</button></div><div className="detail-card product-lines">{order.items.map((item) => <span key={item.name}>{item.name}<b>{item.quantity} × {money(item.price)}</b></span>)}<strong>Жалпы сома <b>{money(order.total)}</b></strong></div>{order.status === "ready" && <div className="document-card"><h3>Құжаттар автоматты дайын</h3><p>Жүйе тапсырыс нөмірінен стикер мен накладнойды жасады. Енді басып шығарып, қорапқа бекітіңіз.</p><div className="document-code"><span>Стикер</span><strong>{sticker}</strong></div><div className="document-code"><span>Накладной</span><strong>{waybill}</strong></div><WarehouseDocumentActions order={order} sticker={sticker} waybill={waybill}/><label className="document-check"><input type="checkbox" checked={stickerAttached} onChange={(event) => setStickerAttached(event.target.checked)} /> Стикер жапсырылды</label><label className="document-check"><input type="checkbox" checked={waybillPlaced} onChange={(event) => setWaybillPlaced(event.target.checked)} /> Накладной қойылды</label></div>}{order.status === "labeled" && <div className="document-card success-card"><strong>✓ Құжаттар дайын</strong><span>Стикер: {sticker}</span><span>Накладной: {waybill}</span><WarehouseDocumentActions order={order} sticker={sticker} waybill={waybill}/></div>}<button className="role-primary" onClick={advance} disabled={order.status === "shipped" || (order.status === "ready" && (!stickerAttached || !waybillPlaced))}>{actionLabel}</button>{order.status === "ready" && (!stickerAttached || !waybillPlaced) && <small className="form-hint">Екі құжатты басып шығарып, физикалық түрде бекіткен соң белгілеңіз.</small>}</section>;
+  const actionLabel = order.status === "new" ? "Қабылдадым, жинауға кірістім" : order.status === "picking" ? "Жинау аяқталды — QR дайындау" : order.status === "ready" ? "Стикер және накладной бекіту" : order.status === "labeled" ? "Экспедитордың QR сканерлеуін күту" : "Экспедитор алып кетті";
+  return <section className="role-screen">
+    <div className="role-heading"><button className="back" onClick={() => go("orders")}>‹</button><h1>{order.id}</h1><button>⌯</button></div>
+    <div className="order-detail-head"><div><span className={`status ${orderStatusClass[order.status]}`}>{statusLabel[order.status]}</span><h2>{order.store}</h2><small>{order.address}</small></div><b>{money(order.total)}</b></div>
+    <div className="workflow">{steps.map((step, index) => <div className={`workflow-step ${index < currentIndex ? "done" : ""} ${index === currentIndex ? "active" : ""}`} key={step.key}><span>{index < currentIndex ? "✓" : index + 1}</span><div><strong>{step.label}</strong><small>{index === 0 ? "СӨ тапсырысы автоматты түсті" : index === 1 ? "Қоймашы жинауды бастайды" : index === 2 ? "Барлық позиция жиналды" : index === 3 ? "Қорап QR стикерімен дайын" : "Экспедитор QR арқылы қабылдады"}</small></div></div>)}</div>
+    <div className="role-section-title"><h3>Тауарлар ({order.items.length})</h3><button onClick={() => go("products")}>Қоймадан көру</button></div>
+    <div className="detail-card product-lines">{order.items.map((item) => <span key={item.name}>{item.name}<b>{item.quantity} × {money(item.price)}</b></span>)}<strong>Жалпы сома <b>{money(order.total)}</b></strong></div>
+    {order.status === "ready" && <div className="document-card"><h3>QR стикер автоматты дайын</h3><p>Стикерді басып шығарып қорапқа жабыстырыңыз. Накладнойды қораптың үстіне қойыңыз.</p><div className="document-code"><span>Стикер</span><strong>{sticker}</strong></div><div className="document-code"><span>Накладной</span><strong>{waybill}</strong></div><WarehouseDocumentActions order={order} sticker={sticker} waybill={waybill}/><label className="document-check"><input type="checkbox" checked={stickerAttached} onChange={(event) => setStickerAttached(event.target.checked)} /> QR стикер қорапқа жапсырылды</label><label className="document-check"><input type="checkbox" checked={waybillPlaced} onChange={(event) => setWaybillPlaced(event.target.checked)} /> Накладной қораптың үстіне қойылды</label></div>}
+    {order.status === "labeled" && <div className="document-card success-card"><strong>✓ Қорап экспедиторға дайын</strong><span>QR стикер: {sticker}</span><span>Накладной: {waybill}</span><WarehouseDocumentActions order={order} sticker={sticker} waybill={waybill}/><div className="handoff-wait-note"><b>⌁</b><span><strong>Экспедиторды күту</strong><small>Күй тек QR сканерленгенде өзгереді.</small></span></div></div>}
+    {order.status === "shipped" && <div className="handoff-complete"><span>✓</span><div><strong>Экспедитор тапсырысты қабылдады</strong><small>Қораптағы QR код сканерленіп, алып кету расталды.</small></div></div>}
+    <button className="role-primary" onClick={advance} disabled={order.status === "labeled" || order.status === "shipped" || (order.status === "ready" && (!stickerAttached || !waybillPlaced))}>{actionLabel}</button>
+    {order.status === "ready" && (!stickerAttached || !waybillPlaced) && <small className="form-hint">Екі құжатты басып шығарып, физикалық түрде бекіткен соң белгілеңіз.</small>}
+  </section>;
 }
 
 function WarehouseNotifications({ go }: { go: (screen: Screen) => void }) { const [read,setRead]=useState<number[]>([]);const [unreadOnly,setUnreadOnly]=useState(false);const items=["Қалдық аз қалды","Тауар қабылданды","Санау аяқталды","Тапсырыс дайын"];return <section className="role-screen"><div className="role-heading"><h1>Хабарламалар</h1><button onClick={()=>setUnreadOnly((value)=>!value)}>{unreadOnly?"Барлығы":"Оқылмаған"}</button></div>{items.map((name,index)=>(!unreadOnly||!read.includes(index))&&<button className="notification-row" onClick={()=>setRead((current)=>[...current,index])} key={name}><span className={`notification-icon n${index}`}>●</span><div><strong>{name}</strong><small>{index===0?"KRAUSZ Проектор 100W қоймада аз қалды":"Операция сәтті сақталды"}</small><em>12.05.2024 · 10:30</em></div>{!read.includes(index)&&<b>•</b>}</button>)}<button className="role-primary" onClick={()=>{setRead(items.map((_,index)=>index));go("dashboard")}}>Барлығын оқу</button></section> }

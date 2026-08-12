@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { BrowserQRCodeReader } from "@zxing/browser";
 import DriverNavigation from "../../components/DriverNavigation";
 import { supabase } from "../../lib/supabase";
+import { parsePickupQrValue } from "../../lib/warehouse-qr";
 
 type Screen = "dashboard" | "orders" | "detail" | "route" | "stops" | "scanner" | "receive" | "done" | "reports" | "notifications" | "vehicle" | "profile" | "fuel" | "documents" | "support" | "more";
 type Stop = { name: string; address: string; time: string; distance: string; status: "Жолда" | "Күтуде" | "Жоспарда" | "Жеткізілді"; coordinates: [number, number] };
+type PickupResult = { ok: boolean; code?: string; message: string };
 
 const stops: Stop[] = [
   { name: "Строймаг", address: "Алматы қ., Райымбек 348", time: "10:30", distance: "2.4 км", status: "Жолда", coordinates: [76.8897, 43.2383] },
@@ -26,6 +29,7 @@ export default function DispatcherApp() {
   const [deliveredOrders, setDeliveredOrders] = useState<string[]>([]);
   const [routeStarted, setRouteStarted] = useState(false);
   const [deliveryStateReady, setDeliveryStateReady] = useState(false);
+  const [initialPickupCode, setInitialPickupCode] = useState("");
   useEffect(() => {
     if (!supabase) return;
     let active = true;
@@ -48,19 +52,67 @@ export default function DispatcherApp() {
     }
   }, []);
   useEffect(() => {
+    const pickup = new URLSearchParams(window.location.search).get("pickup");
+    if (pickup) {
+      setInitialPickupCode(window.location.href);
+      setScreen("receive");
+    }
+  }, []);
+  useEffect(() => {
     if (!deliveryStateReady) return;
     localStorage.setItem("alsat-dispatcher-accepted", JSON.stringify(acceptedOrders));
     localStorage.setItem("alsat-dispatcher-delivered", JSON.stringify(deliveredOrders));
     localStorage.setItem("alsat-dispatcher-route-started", String(routeStarted));
   }, [acceptedOrders, deliveredOrders, deliveryStateReady, routeStarted]);
-  const acceptWarehouseOrder = (rawCode: string) => {
-    const normalized = rawCode.trim().toUpperCase().replace(/^QR[-\s]?/, "");
-    const index = stops.findIndex((_, stopIndex) => normalized === warehouseCode(stopIndex) || normalized === `ALSAT-${100045 + stopIndex}` || normalized === String(100045 + stopIndex));
-    if (index < 0) return false;
-    const code = warehouseCode(index);
-    setAcceptedOrders((current) => current.includes(code) ? current : [...current, code]);
-    setSelectedStop(stops[index]);
-    return true;
+  const acceptWarehouseOrder = async (rawCode: string): Promise<PickupResult> => {
+    const parsed = parsePickupQrValue(rawCode);
+    if (!parsed) return { ok: false, message: "QR коды танылмады. Стикерді қайта сканерлеңіз." };
+    const code = parsed.stickerCode;
+
+    if (supabase) {
+      let query = supabase.from("orders").select("id,warehouse_status,sticker_code").eq("sticker_code", code);
+      if (parsed.orderId) query = query.eq("id", parsed.orderId);
+      const { data: remoteOrder, error: findError } = await query.limit(1).maybeSingle();
+      if (findError) return { ok: false, message: `Тапсырысты тексеру мүмкін болмады: ${findError.message}` };
+      if (remoteOrder) {
+        if (remoteOrder.warehouse_status !== "labeled" && remoteOrder.warehouse_status !== "shipped") {
+          return { ok: false, message: "Қойма бұл тапсырысты әлі жинап, стикерін бекітпеген." };
+        }
+        if (remoteOrder.warehouse_status === "labeled") {
+          const { error: updateError } = await supabase
+            .from("orders")
+            .update({ warehouse_status: "shipped", shipped_at: new Date().toISOString() })
+            .eq("id", remoteOrder.id)
+            .eq("warehouse_status", "labeled");
+          if (updateError) return { ok: false, message: `Қабылдауды растау мүмкін болмады: ${updateError.message}` };
+        }
+        setAcceptedOrders((current) => current.includes(code) ? current : [...current, code]);
+        const index = stops.findIndex((_, stopIndex) => code === warehouseCode(stopIndex));
+        if (index >= 0) setSelectedStop(stops[index]);
+        window.history.replaceState({}, "", "/dispatcher");
+        return { ok: true, code, message: remoteOrder.warehouse_status === "shipped" ? `${code} бұрын қабылданған` : `${code} · Экспедитор қабылдады` };
+      }
+    }
+
+    try {
+      const localOrders = JSON.parse(localStorage.getItem("alsat-warehouse-orders") ?? "[]") as Array<{ id: string; status: string; sticker?: string }>;
+      const localIndex = localOrders.findIndex((order) => order.sticker?.toUpperCase() === code || `ST-${order.id.replace(/\D/g, "")}` === code);
+      const localOrder = localOrders[localIndex];
+      if (localOrder) {
+        if (localOrder.status !== "labeled" && localOrder.status !== "shipped") return { ok: false, message: "Қойма бұл тапсырысты әлі экспедиторға дайындамаған." };
+        if (localOrder.status === "labeled") {
+          localOrders[localIndex] = { ...localOrder, status: "shipped" };
+          localStorage.setItem("alsat-warehouse-orders", JSON.stringify(localOrders));
+        }
+        setAcceptedOrders((current) => current.includes(code) ? current : [...current, code]);
+        const stopIndex = stops.findIndex((_, index) => code === warehouseCode(index));
+        if (stopIndex >= 0) setSelectedStop(stops[stopIndex]);
+        window.history.replaceState({}, "", "/dispatcher");
+        return { ok: true, code, message: `${code} · Экспедитор қабылдады` };
+      }
+    } catch { /* The Supabase result above remains authoritative when local cache is unavailable. */ }
+
+    return { ok: false, message: "Бұл QR бойынша дайын тапсырыс табылмады." };
   };
   if (!logged) return <DispatcherLoginAlsat onLogin={() => setLogged(true)} />;
   const go = (next: Screen) => setScreen(next);
@@ -72,7 +124,7 @@ export default function DispatcherApp() {
     {screen === "route" && <DispatcherRoute go={go} started={routeStarted} canStart={acceptedOrders.length > 0} acceptedOrders={acceptedOrders} deliveredOrders={deliveredOrders} onStart={() => setRouteStarted(true)} onSelect={(stop) => { setSelectedStop(stop); go("detail"); }} />}
     {screen === "stops" && <StopList go={go} onSelect={(stop) => { setSelectedStop(stop); go("detail"); }} />}
     {screen === "scanner" && <BarcodeScanner go={go} />}
-    {screen === "receive" && <DispatcherReceive go={go} acceptedOrders={acceptedOrders} onAccept={acceptWarehouseOrder} onStart={() => { setRouteStarted(true); go("route"); }} />}
+    {screen === "receive" && <DispatcherReceive go={go} acceptedOrders={acceptedOrders} initialCode={initialPickupCode} onAccept={acceptWarehouseOrder} onStart={() => { setRouteStarted(true); go("route"); }} />}
     {screen === "done" && <DeliveryDone stop={selectedStop} hasNext={acceptedOrders.some((code) => !deliveredOrders.includes(code))} go={go} />}
     {screen === "reports" && <DispatcherReports go={go} />}
     {screen === "notifications" && <Notifications go={go} />}
@@ -104,7 +156,90 @@ function DispatcherRoute({ go, onSelect, started, canStart, acceptedOrders, deli
   return <section className="role-screen route-navigation-screen"><div className="role-heading"><h1>Бүгінгі маршрут</h1><button onClick={() => go("stops")}>☷</button></div><p className="role-muted">{canStart ? `${acceptedStops.length} қабылданған тапсырыс · ${completedCount} жеткізілді` : "Алдымен қоймадағы тапсырыстарды қабылдаңыз"}</p>{!started ? <section className="delivery-start-card"><span className="delivery-start-icon">⌖</span><div><strong>Жеткізу бастауға дайынсыз ба?</strong><small>Қабылданған тапсырыстар маршрутқа қосылады.</small></div><button disabled={!canStart} onClick={onStart}>Жеткізуді бастау　›</button></section> : <><div className="route-live-badge">●　GPS навигация белсенді <span>· {remainingStops.length} нүкте қалды</span></div><DriverNavigation stops={remainingStops.map((stop) => ({ id: warehouseCode(stops.indexOf(stop)), name: stop.name, address: stop.address, time: stop.time, coordinates: stop.coordinates }))} onOpenStop={openStop}/><div className="role-section-title"><h3>Маршрут нүктелері</h3><span>{completedCount}/{acceptedStops.length}</span></div><div className="route-stop-list">{acceptedStops.map((stop, index) => { const complete = deliveredOrders.includes(warehouseCode(stops.indexOf(stop))); return <button className="role-list-row" key={stop.name} onClick={() => onSelect(stop)}><span className={`stop-number ${complete ? "complete" : ""}`}>{complete ? "✓" : index + 1}</span><div><strong>{stop.name}</strong><small>{stop.time} дейін · {stop.distance}</small></div><em className={`status ${complete ? "green" : stop.status === "Күтуде" ? "yellow" : "blue"}`}>{complete ? "Жеткізілді" : index === completedCount ? "Келесі" : "Жоспарда"}</em></button>; })}</div></>}</section>;
 }
 
-function DispatcherReceive({ go, acceptedOrders, onAccept, onStart }: { go: (screen: Screen) => void; acceptedOrders: string[]; onAccept: (code: string) => boolean; onStart: () => void }) { const [code, setCode] = useState(""); const [message, setMessage] = useState(""); const handleAccept = (value = code) => { const accepted = onAccept(value || warehouseCode(0)); setMessage(accepted ? `№${value.replace(/[^0-9]/g, "") || "100045"} қабылданды` : "QR коды табылмады. Қайта тексеріңіз."); if (accepted) setCode(""); }; return <section className="role-screen receive-screen"><div className="role-heading"><button className="back" onClick={() => go("dashboard")}>‹</button><h1>Қоймада қабылдау</h1><span>{acceptedOrders.length}/12</span></div><div className="receive-steps"><span className="active">1　QR сканерлеу</span><span>2　Қабылдау</span><span>3　Жеткізу</span></div><div className="receive-intro"><strong>Стикердегі QR кодты сканерлеңіз</strong><small>Әр дайын қаптаманы қабылдаған кезде кодын тексеріңіз.</small></div><div className="scanner-box receive-scanner"><div className="scan-corners">⌁</div><p>QR кодты рамкаға орналастырыңыз</p></div><input className="role-input" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => event.key === "Enter" && handleAccept()} placeholder="ST-100045 кодын енгізу"/><button className="role-primary" onClick={() => handleAccept()}>QR арқылы қабылдау</button>{message && <small className={`receive-message ${message.includes("табылмады") ? "error" : "success"}`}>{message}</small>}<div className="role-section-title"><h3>Қабылданған тапсырыстар</h3><span>{acceptedOrders.length} дана</span></div>{acceptedOrders.length === 0 ? <div className="receive-empty">Қоймадан алған тапсырыстарыңыз осы жерде көрінеді.</div> : <div className="accepted-orders">{acceptedOrders.map((acceptedCode) => { const index = stops.findIndex((_, stopIndex) => warehouseCode(stopIndex) === acceptedCode); const stop = stops[index]; return <div className="accepted-order" key={acceptedCode}><span className="list-icon">✓</span><div><strong>№{acceptedCode.replace(/^(ALSAT-|ST-)/, "")} · {stop?.name}</strong><small>QR тексерілді · Қабылданды</small></div><em>Дайын</em></div>; })}</div>}{acceptedOrders.length > 0 && <button className="role-primary start-delivery-button" onClick={onStart}>Жеткізуді бастау　→</button>}</section> }
+function DispatcherReceive({ go, acceptedOrders, initialCode, onAccept, onStart }: { go: (screen: Screen) => void; acceptedOrders: string[]; initialCode: string; onAccept: (code: string) => Promise<PickupResult>; onStart: () => void }) {
+  const [code, setCode] = useState("");
+  const [message, setMessage] = useState("");
+  const [successful, setSuccessful] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const autoHandled = useRef("");
+
+  async function handleAccept(value = code) {
+    if (checking || !value.trim()) return;
+    setChecking(true);
+    const result = await onAccept(value);
+    setSuccessful(result.ok);
+    setMessage(result.message);
+    if (result.ok) setCode("");
+    setChecking(false);
+  }
+
+  useEffect(() => {
+    if (initialCode && autoHandled.current !== initialCode) {
+      autoHandled.current = initialCode;
+      void handleAccept(initialCode);
+    }
+  }, [initialCode]);
+
+  return <section className="role-screen receive-screen">
+    <div className="role-heading"><button className="back" onClick={() => go("dashboard")}>‹</button><h1>Қоймада қабылдау</h1><span>{acceptedOrders.length} дана</span></div>
+    <div className="receive-steps"><span className="active">1　QR сканерлеу</span><span>2　Қабылдауды растау</span><span>3　Жеткізу</span></div>
+    <div className="receive-intro"><strong>Қораптағы Alsat QR стикерін сканерлеңіз</strong><small>Тек қоймашы жинап, стикерін бекіткен тапсырыс қабылданады.</small></div>
+    <QrCameraScanner busy={checking} onScan={(value) => { setCode(value); void handleAccept(value); }}/>
+    <div className="manual-pickup-code"><span>немесе стикер кодын қолмен енгізіңіз</span><input className="role-input" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void handleAccept(); }} placeholder="ST-100045"/><button className="role-primary" disabled={checking || !code.trim()} onClick={() => { void handleAccept(); }}>{checking ? "Тексерілуде…" : "Тапсырысты қабылдау"}</button></div>
+    {message && <small className={`receive-message ${successful ? "success" : "error"}`}>{successful ? "✓ " : "! "}{message}</small>}
+    <div className="role-section-title"><h3>Қабылданған тапсырыстар</h3><span>{acceptedOrders.length} дана</span></div>
+    {acceptedOrders.length === 0 ? <div className="receive-empty">Сканерленген тапсырыстар осы жерде көрінеді.</div> : <div className="accepted-orders">{acceptedOrders.map((acceptedCode) => { const index = stops.findIndex((_, stopIndex) => warehouseCode(stopIndex) === acceptedCode); const stop = stops[index]; return <div className="accepted-order" key={acceptedCode}><span className="list-icon">✓</span><div><strong>№{acceptedCode.replace(/^(ALSAT-|ST-)/, "")} · {stop?.name ?? "Тапсырыс"}</strong><small>QR тексерілді · Экспедитор қабылдады</small></div><em>Қабылданды</em></div>; })}</div>}
+    {acceptedOrders.length > 0 && <button className="role-primary start-delivery-button" onClick={onStart}>Жеткізуді бастау　→</button>}
+  </section>;
+}
+
+function QrCameraScanner({ busy, onScan }: { busy: boolean; onScan: (value: string) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const [active, setActive] = useState(false);
+  const [error, setError] = useState("");
+
+  const stop = () => {
+    controlsRef.current?.stop();
+    controlsRef.current = null;
+    setActive(false);
+  };
+
+  useEffect(() => () => controlsRef.current?.stop(), []);
+
+  async function start() {
+    if (busy) return;
+    setError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Бұл құрылғыда камера қолжетімсіз. Кодты қолмен енгізіңіз.");
+      return;
+    }
+    try {
+      const reader = new BrowserQRCodeReader();
+      const controls = await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } }, audio: false }, videoRef.current!, (result) => {
+        if (!result) return;
+        const value = result.getText();
+        controlsRef.current?.stop();
+        controlsRef.current = null;
+        setActive(false);
+        onScan(value);
+      });
+      controlsRef.current = controls;
+      setActive(true);
+    } catch (cameraError) {
+      setActive(false);
+      setError(cameraError instanceof Error && cameraError.name === "NotAllowedError" ? "Камераға рұқсат берілмеді. Браузерден камера рұқсатын қосыңыз." : "Камераны қосу мүмкін болмады. Кодты қолмен енгізуге болады.");
+    }
+  }
+
+  return <div className={`scanner-box receive-scanner live-qr-scanner ${active ? "camera-active" : ""}`}>
+    <video ref={videoRef} muted playsInline />
+    {!active && <div className="scan-corners">⌁</div>}
+    <p>{active ? "QR кодты жасыл рамкаға орналастырыңыз" : "Камерамен QR сканерлеу"}</p>
+    <button type="button" className="camera-toggle" onClick={active ? stop : () => { void start(); }}>{active ? "Камераны тоқтату" : "Камераны қосу"}</button>
+    {error && <small className="camera-error">{error}</small>}
+  </div>;
+}
 function StopList({ go, onSelect }: { go: (screen: Screen) => void; onSelect: (stop: Stop) => void }) { const [filter,setFilter]=useState("all");const visible=filter==="all"?stops:stops.filter((stop)=>filter==="plan"?stop.status==="Жоспарда":stop.status==="Жеткізілді");return <section className="role-screen"><div className="role-heading"><button className="back" onClick={()=>go("route")}>‹</button><h1>Тоқтау нүктелері</h1><button onClick={()=>go("route")}>⌖</button></div><div className="role-tabs"><button className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>Барлығы</button><button className={filter==="plan"?"active":""} onClick={()=>setFilter("plan")}>Жоспар</button><button className={filter==="done"?"active":""} onClick={()=>setFilter("done")}>Аяқталды</button></div>{visible.length?visible.map((stop,index)=><button className="role-list-row" key={stop.name} onClick={()=>onSelect(stop)}><span className={`stop-number ${stop.status==="Жеткізілді"?"complete":""}`}>{index+1}</span><div><strong>№{100045+stops.indexOf(stop)}　{stop.name}</strong><small>{stop.time} дейін · {stop.distance}</small></div><em className={`status ${stop.status==="Жолда"?"green":stop.status==="Күтуде"?"yellow":"blue"}`}>{stop.status}</em></button>):<div className="receive-empty">Бұл сүзгіде нүкте жоқ</div>}</section> }
 function BarcodeScanner({ go }: { go: (screen: Screen) => void }) { const [code,setCode]=useState("");const [torch,setTorch]=useState(false);const [gallery,setGallery]=useState(false);return <section className="role-screen scanner-screen"><div className="role-heading"><button className="back" onClick={()=>go("orders")}>‹</button><h1>Штрихкодты сканерлеу</h1><button onClick={()=>go("orders")}>×</button></div><div className={`scanner-box ${torch?"torch-on":""}`}><div className="scan-corners">▣</div><p>{torch?"Фонарик қосылды":"Штрихкодты рамкаға орналастырыңыз"}</p></div><small className="role-muted center">немесе кодты қолмен енгізу</small><input className="role-input" value={code} onChange={(event)=>setCode(event.target.value)} placeholder="Штрихкод енгізу　⌕"/><div className="scanner-actions"><button className={torch?"active":""} onClick={()=>setTorch((value)=>!value)}>♨<small>Фонарик</small></button><button className={gallery?"active":""} onClick={()=>setGallery((value)=>!value)}>▧<small>Галерея</small></button></div>{gallery&&<div className="action-panel">Галереядан QR/штрихкод суретін таңдау режимі қосылды.</div>}<button className="role-primary" disabled={!code.trim()} onClick={()=>go("detail")}>Тексеру</button></section> }
 function DeliveryDone({ stop, hasNext, go }: { stop: Stop; hasNext: boolean; go: (screen: Screen) => void }) { return <section className="role-screen done-screen"><span className="big-check">✓</span><h1>Тапсырыс сәтті жеткізілді!</h1><p>№{100045+stops.indexOf(stop)} · {stop.name}<br/>{stop.address}</p><div className="signature-box">Клиент қолтаңбасы<div>✍</div></div><button className="role-primary" onClick={() => go("route")}>{hasNext ? "Растау және келесі нүктеге өту" : "Маршрутты аяқтау"}</button><button className="text-button" onClick={() => go("orders")}>Тапсырыстар тізіміне қайту</button></section> }

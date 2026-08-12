@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { getWorkspaceIdentity } from "../../lib/workspace-auth";
 import "./marketplace.css";
 
 type CatalogProduct = {
   id: string;
+  companyId?: string;
   name: string;
   sku: string;
   price: number;
@@ -16,6 +18,7 @@ type CatalogProduct = {
   imageUrl: string;
   minOrder: number;
 };
+type CheckoutStore = { id: string; name: string; address: string; contactName: string; phone: string };
 
 const cartStorageKey = "alsat-marketplace-cart-v1";
 const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
@@ -32,6 +35,7 @@ const demoProducts: CatalogProduct[] = [
 function normalizeProduct(row: Record<string, unknown>): CatalogProduct {
   return {
     id: String(row.id),
+    companyId: typeof row.company_id === "string" ? row.company_id : undefined,
     name: String(row.marketplace_title || row.name || "Тауар"),
     sku: String(row.sku || "SKU көрсетілмеген"),
     price: Number(row.price || 0),
@@ -50,6 +54,15 @@ export default function MarketplacePage() {
   const [category, setCategory] = useState("Барлығы");
   const [selected, setSelected] = useState<CatalogProduct | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutSuccess, setCheckoutSuccess] = useState("");
+  const [checkoutStores, setCheckoutStores] = useState<CheckoutStore[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [sellerCompanyId, setSellerCompanyId] = useState("");
+  const [newStore, setNewStore] = useState({ name: "", address: "", contactName: "", phone: "" });
+  const [checkoutNote, setCheckoutNote] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(Boolean(supabase));
   const [usingDemo, setUsingDemo] = useState(!supabase);
@@ -57,7 +70,10 @@ export default function MarketplacePage() {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(cartStorageKey) || "{}");
-      if (saved && typeof saved === "object") setCart(saved);
+      if (saved && typeof saved === "object") {
+        const safeCart = Object.fromEntries(Object.entries(saved).filter(([id, quantity]) => typeof id === "string" && Number.isFinite(Number(quantity)) && Number(quantity) > 0).map(([id, quantity]) => [id, Math.floor(Number(quantity))]));
+        setCart(safeCart);
+      }
     } catch { /* Keep an empty cart if the previous browser cache is invalid. */ }
   }, []);
 
@@ -71,7 +87,7 @@ export default function MarketplacePage() {
       if (!supabase) { setLoading(false); return; }
       const result = await supabase
         .from("products")
-        .select("id,name,sku,price,stock,marketplace_title,marketplace_description,marketplace_category,marketplace_image_url,marketplace_min_order")
+        .select("id,company_id,name,sku,price,stock,marketplace_title,marketplace_description,marketplace_category,marketplace_image_url,marketplace_min_order")
         .eq("workspace_active", true)
         .eq("marketplace_published", true)
         .gt("stock", 0)
@@ -117,6 +133,71 @@ export default function MarketplacePage() {
     });
   }
 
+  async function openCheckout() {
+    setCheckoutError("");
+    setCheckoutSuccess("");
+    setSellerCompanyId("");
+    if (!cartLines.length) return;
+    if (cartLines.some((line) => line.product.id.startsWith("demo-"))) {
+      setNotice("Нақты тапсырыс үшін алдымен Supabase migration-ын қосып, жарияланған тауарды таңдаңыз.");
+      return;
+    }
+    if (!supabase) {
+      setNotice("Тапсырыс беру үшін Supabase және Workspace авторизациясы қажет.");
+      return;
+    }
+    const companyIds = [...new Set(cartLines.map((line) => line.product.companyId).filter((id): id is string => Boolean(id)))];
+    if (companyIds.length !== 1) {
+      setCheckoutError("Бір тапсырысқа бір компанияның тауарларын ғана қосуға болады. Себетті бөліп рәсімдеңіз.");
+      setCheckoutOpen(true);
+      return;
+    }
+    setCheckoutLoading(true);
+    const identity = await getWorkspaceIdentity();
+    const membership = identity.memberships.find((item) => item.company_id === companyIds[0] && (item.role === "owner" || item.role === "sales_agent"));
+    if (!identity.user || !membership) {
+      setCheckoutError("Бұл Marketplace тапсырысын жіберу үшін тиісті Alsat Workspace-ке кіріңіз.");
+      setCheckoutOpen(true);
+      setCheckoutLoading(false);
+      return;
+    }
+    setSellerCompanyId(membership.company_id);
+    const { data, error } = await supabase.from("stores").select("id,name,address,contact_name,phone").eq("company_id", membership.company_id).order("created_at", { ascending: false });
+    if (error) setCheckoutError(error.message);
+    const stores = (data ?? []).map((store) => ({ id: store.id, name: store.name, address: store.address ?? "", contactName: store.contact_name ?? "", phone: store.phone ?? "" }));
+    setCheckoutStores(stores);
+    setSelectedStoreId(stores[0]?.id ?? "");
+    setCheckoutOpen(true);
+    setCartOpen(false);
+    setCheckoutLoading(false);
+  }
+
+  async function submitCheckout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCheckoutError("");
+    if (!supabase || !sellerCompanyId) { setCheckoutError("Workspace компаниясы анықталмады. Қайта кіріп көріңіз."); return; }
+    setCheckoutLoading(true);
+    try {
+      let storeId = selectedStoreId;
+      if (!storeId) {
+        if (!newStore.name.trim() || !newStore.address.trim() || !newStore.phone.trim()) throw new Error("Дүкен атауы, мекенжайы және телефон нөмірі міндетті.");
+        const { data: createdStore, error: storeError } = await supabase.from("stores").insert({ company_id: sellerCompanyId, name: newStore.name.trim(), address: newStore.address.trim(), contact_name: newStore.contactName.trim() || null, phone: newStore.phone.trim() }).select("id").single();
+        if (storeError || !createdStore) throw new Error(storeError?.message || "Дүкенді сақтау мүмкін болмады.");
+        storeId = createdStore.id;
+      }
+      const { data: order, error: orderError } = await supabase.from("orders").insert({ company_id: sellerCompanyId, store_id: storeId, status: "new", warehouse_status: "new", total: cartTotal, source: "marketplace", marketplace_note: checkoutNote.trim() || null }).select("id").single();
+      if (orderError || !order) throw new Error(orderError?.message || "Тапсырысты сақтау мүмкін болмады.");
+      const { error: itemsError } = await supabase.from("order_items").insert(cartLines.map((line) => ({ order_id: order.id, product_id: line.product.id, quantity: line.quantity, unit_price: line.product.price, commission_amount: 0 })));
+      if (itemsError) throw new Error(`Тапсырыс жасалды, бірақ тауар жолдары сақталмады: ${itemsError.message}`);
+      setCart({});
+      setCheckoutSuccess(order.id.slice(0, 8).toUpperCase());
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Тапсырыс жасау мүмкін болмады.");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }
+
   return <main className="marketplace-shell">
     <header className="marketplace-header">
       <Link className="marketplace-logo" href="/"><span>A</span><div><strong>ALSAT</strong><small>MARKETPLACE</small></div></Link>
@@ -146,7 +227,8 @@ export default function MarketplacePage() {
     {notice && <div className="marketplace-toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
 
     {selected && <div className="marketplace-overlay" onClick={() => setSelected(null)}><section className="marketplace-modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setSelected(null)}>×</button><div className="modal-product-visual">{selected.imageUrl ? <img src={selected.imageUrl} alt=""/> : <span>▣</span>}</div><span className="product-category">{selected.category}</span><h2>{selected.name}</h2><p>{selected.description}</p><div className="modal-meta"><span>SKU <b>{selected.sku}</b></span><span>Қалдық <b>{selected.stock} дана</b></span><span>Минимум <b>{selected.minOrder} дана</b></span></div><strong className="modal-price">{money.format(selected.price)}</strong><button className="modal-primary" onClick={() => { addToCart(selected); setSelected(null); setCartOpen(true); }}>Себетке қосу →</button></section></div>}
-    {cartOpen && <div className="marketplace-overlay" onClick={() => setCartOpen(false)}><aside className="marketplace-cart" onClick={(event) => event.stopPropagation()}><div className="cart-head"><div><span className="marketplace-kicker">ALSAT MARKETPLACE</span><h2>Себет</h2></div><button className="modal-close" onClick={() => setCartOpen(false)}>×</button></div>{cartLines.length ? <><div className="cart-lines">{cartLines.map(({ product, quantity }) => <div className="cart-line" key={product.id}><div className="cart-line-visual">▣</div><div className="cart-line-copy"><strong>{product.name}</strong><small>{money.format(product.price)}</small><div className="quantity-control"><button onClick={() => changeQuantity(product, -1)}>−</button><b>{quantity}</b><button onClick={() => changeQuantity(product, 1)}>+</button></div></div><strong>{money.format(product.price * quantity)}</strong></div>)}</div><div className="cart-summary"><span>Барлығы <b>{cartCount} дана</b></span><strong>{money.format(cartTotal)}</strong></div><button className="modal-primary" onClick={() => setNotice("Checkout келесі қадамда қосылады: дүкенді таңдау және тапсырысты қоймаға жіберу.")}>Тапсырысты рәсімдеу →</button><small className="cart-hint">Тапсырыс жасалғанда ол бірден Alsat қоймасының жұмыс тізбегіне түседі.</small></> : <div className="cart-empty"><span>🛒</span><strong>Себет бос</strong><small>Каталогтан тауар қосыңыз.</small><button className="modal-primary" onClick={() => setCartOpen(false)}>Каталогқа оралу</button></div>}</aside></div>}
+    {cartOpen && <div className="marketplace-overlay" onClick={() => setCartOpen(false)}><aside className="marketplace-cart" onClick={(event) => event.stopPropagation()}><div className="cart-head"><div><span className="marketplace-kicker">ALSAT MARKETPLACE</span><h2>Себет</h2></div><button className="modal-close" onClick={() => setCartOpen(false)}>×</button></div>{cartLines.length ? <><div className="cart-lines">{cartLines.map(({ product, quantity }) => <div className="cart-line" key={product.id}><div className="cart-line-visual">▣</div><div className="cart-line-copy"><strong>{product.name}</strong><small>{money.format(product.price)}</small><div className="quantity-control"><button onClick={() => changeQuantity(product, -1)}>−</button><b>{quantity}</b><button onClick={() => changeQuantity(product, 1)}>+</button></div></div><strong>{money.format(product.price * quantity)}</strong></div>)}</div><div className="cart-summary"><span>Барлығы <b>{cartCount} дана</b></span><strong>{money.format(cartTotal)}</strong></div><button className="modal-primary" onClick={() => void openCheckout()} disabled={checkoutLoading}>{checkoutLoading ? "Тексерілуде…" : "Тапсырысты рәсімдеу →"}</button><small className="cart-hint">Тапсырыс жасалғанда ол бірден Alsat қоймасының жұмыс тізбегіне түседі.</small></> : <div className="cart-empty"><span>🛒</span><strong>Себет бос</strong><small>Каталогтан тауар қосыңыз.</small><button className="modal-primary" onClick={() => setCartOpen(false)}>Каталогқа оралу</button></div>}</aside></div>}
+    {checkoutOpen && <div className="marketplace-overlay" onClick={() => setCheckoutOpen(false)}><section className="checkout-modal" onClick={(event) => event.stopPropagation()}><div className="cart-head"><div><span className="marketplace-kicker">ALSAT MARKETPLACE</span><h2>{checkoutSuccess ? "Тапсырыс қабылданды" : "Тапсырысты рәсімдеу"}</h2></div><button className="modal-close" onClick={() => setCheckoutOpen(false)}>×</button></div>{checkoutSuccess ? <div className="checkout-success"><span>✓</span><strong>№{checkoutSuccess}</strong><p>Тапсырыс қоймаға жіберілді. Қоймашы қабылдағаннан кейін QR стикер мен накладной дайындалады.</p><button className="modal-primary" onClick={() => { setCheckoutOpen(false); setCheckoutSuccess(""); }}>Marketplace-ке оралу</button></div> : checkoutError && !sellerCompanyId ? <div className="checkout-auth-error"><strong>Workspace-ке кіру қажет</strong><p>{checkoutError}</p><Link className="modal-primary" href="/workspace-login">Workspace-ке кіру →</Link></div> : <form className="checkout-form" onSubmit={submitCheckout}>{checkoutError && <div className="checkout-error">{checkoutError}</div>}{checkoutStores.length > 0 && <label>Дүкенді таңдаңыз<select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)}><option value="">+ Жаңа дүкен қосу</option>{checkoutStores.map((store) => <option value={store.id} key={store.id}>{store.name} · {store.address}</option>)}</select></label>}{!selectedStoreId && <><label>Дүкен атауы<input required value={newStore.name} onChange={(event) => setNewStore((current) => ({ ...current, name: event.target.value }))} placeholder="Строймаг"/></label><label>Мекенжай<input required value={newStore.address} onChange={(event) => setNewStore((current) => ({ ...current, address: event.target.value }))} placeholder="Алматы қ., Райымбек 348"/></label><div className="checkout-two"><label>Байланыс тұлғасы<input value={newStore.contactName} onChange={(event) => setNewStore((current) => ({ ...current, contactName: event.target.value }))} placeholder="Нұрлан Ә."/></label><label>Телефон<input required value={newStore.phone} onChange={(event) => setNewStore((current) => ({ ...current, phone: event.target.value }))} placeholder="+7 700 000 00 00"/></label></div></>}<label>Ескерту<textarea value={checkoutNote} onChange={(event) => setCheckoutNote(event.target.value)} placeholder="Жеткізу бойынша қосымша ақпарат"/></label><div className="checkout-total"><span>Тапсырыс сомасы</span><strong>{money.format(cartTotal)}</strong></div><button className="modal-primary" disabled={checkoutLoading}>{checkoutLoading ? "Жіберілуде…" : "Тапсырысты қоймаға жіберу →"}</button></form>}</section></div>}
     {usingDemo && <div className="marketplace-demo-badge">Демо каталог</div>}
   </main>;
 }

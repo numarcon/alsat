@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
@@ -10,7 +10,7 @@ type Screen = "dashboard" | "products" | "product" | "receive" | "issue" | "stoc
 type Product = { name: string; sku: string; stock: number; price: number; state: "Қолжетімді" | "Аз қалды" | "Төмен"; icon: string };
 type OrderStatus = "new" | "picking" | "ready" | "labeled" | "shipped";
 type WarehouseOrder = { id: string; remoteId?: string; store: string; address: string; total: number; createdAt: string; status: OrderStatus; delivered?: boolean; deliveredAt?: string; recipientName?: string; items: { name: string; quantity: number; price: number }[]; sticker?: string; waybill?: string; stickerAttached?: boolean; waybillPlaced?: boolean };
-type RemoteWarehouseOrder = { id: string; status: string; total: number | string; created_at: string; warehouse_status: string | null; delivered_at: string | null; delivery_recipient_name: string | null; sticker_code: string | null; waybill_number: string | null; stores: { name: string; address: string | null } | Array<{ name: string; address: string | null }> | null; order_items: Array<{ quantity: number; unit_price: number | string; products: { name: string } | Array<{ name: string }> | null }> };
+type RemoteWarehouseOrder = { id: string; status: string; total: number | string; created_at: string; warehouse_status: string | null; delivered_at: string | null; delivery_recipient_name: string | null; sticker_code: string | null; waybill_number: string | null; customers: { name: string; address: string | null } | Array<{ name: string; address: string | null }> | null; order_items: Array<{ quantity: number; unit_price: number | string; products: { name: string } | Array<{ name: string }> | null }> };
 const products: Product[] = [
   { name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", stock: 1250, price: 650, state: "Қолжетімді", icon: "◌" },
   { name: "KRAUSZ Проектор 100W 6500K IP65", sku: "KLZ-FL-100W-6500", stock: 320, price: 8500, state: "Аз қалды", icon: "▣" },
@@ -38,9 +38,17 @@ export default function WarehouseApp() {
   const selectedOrder = useMemo(() => orders.find((order) => order.id === selectedOrderId) ?? orders[0], [orders, selectedOrderId]);
   useEffect(() => {
     if (!supabase) return;
+    const client = supabase;
     let active = true;
-    supabase.auth.getSession().then(({ data }) => { if (active && data.session) setLogged(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { if (active && session) setLogged(true); });
+    const authorize = async (userId?: string) => {
+      if (!userId) { if (active) setLogged(false); return; }
+      const { data: membership } = await client.from("company_users").select("company_id").eq("user_id", userId).eq("role", "warehouse").eq("status", "active").limit(1).maybeSingle();
+      if (!active) return;
+      if (membership) localStorage.setItem("alsat-company-id", membership.company_id);
+      setLogged(Boolean(membership));
+    };
+    client.auth.getSession().then(({ data }) => { void authorize(data.session?.user.id); });
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => { void authorize(session?.user.id); });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
   useEffect(() => {
@@ -53,14 +61,14 @@ export default function WarehouseApp() {
     const loadRemoteOrders = async () => {
       const { data, error } = await client
         .from("orders")
-        .select("id,status,total,created_at,warehouse_status,delivered_at,delivery_recipient_name,sticker_code,waybill_number,stores(name,address),order_items(quantity,unit_price,products(name))")
+        .select("id,status,total,created_at,warehouse_status,delivered_at,delivery_recipient_name,sticker_code,waybill_number,customers(name,address),order_items(quantity,unit_price,products(name))")
         .eq("company_id", companyId)
         .order("created_at", { ascending: false })
         .limit(100);
       if (!active || error || !data) return;
 
       const remoteOrders = (data as unknown as RemoteWarehouseOrder[]).map((row) => {
-        const store = Array.isArray(row.stores) ? row.stores[0] : row.stores;
+        const store = Array.isArray(row.customers) ? row.customers[0] : row.customers;
         const status = (["new", "picking", "ready", "labeled", "shipped"] as const).includes(row.warehouse_status as OrderStatus)
           ? row.warehouse_status as OrderStatus
           : "new";
@@ -153,7 +161,7 @@ export default function WarehouseApp() {
     return () => document.removeEventListener("click", printOrder);
   }, []);
 
-  if (!logged) return <WarehouseLoginAlsat onLogin={() => setLogged(true)} />;
+  if (!logged) return <WarehouseLoginAlsat onLogin={() => { window.location.href = "/workspace-login"; }} />;
   const go = (next: Screen) => setScreen(next);
   const openOrder = (order: WarehouseOrder) => { setSelectedOrderId(order.id); go("order"); };
   const updateOrder = (patch: Partial<WarehouseOrder>) => {
@@ -246,7 +254,7 @@ function WarehouseQrPreview({ order, sticker }: { order: WarehouseOrder; sticker
   useEffect(() => {
     let active = true;
     QRCode.toDataURL(buildPickupQrValue(sticker, order.remoteId), { width: 260, margin: 1, errorCorrectionLevel: "M", color: { dark: "#102a25", light: "#ffffff" } })
-      .then((value) => { if (active) setSource(value); })
+      .then((value: string) => { if (active) setSource(value); })
       .catch(() => { if (active) setSource(""); });
     return () => { active = false; };
   }, [order.remoteId, sticker]);
@@ -297,3 +305,4 @@ function ReturnGoods({ go }: { go: (screen: Screen) => void }) { const [tab,setT
 function Offline({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen offline-screen"><span className="offline-symbol">⌁</span><h1>Интернет байланысы жоқ</h1><p>Кейбір функциялар істемейді. Деректер байланыс қалпына келгенде синхрондалады.</p><button className="role-primary" onClick={() => go("dashboard")}>Қайта қосылу</button></section> }
 function WarehouseMore({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><h1>Көбірек</h1><button className="setting-row role-setting" onClick={() => go("profile")}>⚙　Профиль және баптаулар <b>›</b></button><button className="setting-row role-setting" onClick={() => go("reports")}>▥　Есеп <b>›</b></button><button className="setting-row role-setting" onClick={() => go("scanner")}>⌁　Штрихкод сканері <b>›</b></button><button className="setting-row role-setting" onClick={() => go("offline")}>⌁　Offline режимі <b>›</b></button><button className="setting-row role-setting" onClick={() => go("notifications")}>♧　Хабарламалар <b>›</b></button></section> }
 function Info({ label, value }: { label: string; value: string }) { return <div className="info-line"><span>{label}</span><b>{value}</b></div> }
+

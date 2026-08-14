@@ -11,6 +11,7 @@ import CompanyAgents from "./CompanyAgents";
 import CompanyOrders from "./CompanyOrders";
 import CompanyCommissions from "./CompanyCommissions";
 import type { ProductCatalogItem, ProductVariantOption } from "../lib/product-types";
+import { AlsatBrand, AlsatIcon, type AlsatIconName } from "./AlsatIcon";
 
 type Screen = "dashboard" | "products" | "customers" | "orders" | "agents" | "commissions" | "modules" | "product-form";
 type Product = ProductCatalogItem;
@@ -378,7 +379,7 @@ export default function WorkspaceV2() {
       <WorkspaceLogo />
       <p className="ws2-sidebar-caption">Компания кабинеті</p>
       <nav className="ws2-nav">{nav.map((item) => <button key={item.id} className={screen === item.id || (screen === "product-form" && item.id === "products") ? "active" : ""} onClick={() => setScreen(item.id)}><WorkspaceIcon name={item.icon} /><span>{item.label}</span></button>)}</nav>
-      <div className="ws2-sidebar-links"><span>Операциялық модульдер</span><Link href="/">Marketplace ↗</Link><Link href="/warehouse">Қойма QR ↗</Link><Link href="/dispatcher">Экспедитор және маршрут ↗</Link><Link href="/admin">Alsat Admin ↗</Link></div>
+      <div className="ws2-sidebar-links"><span>Операциялық модульдер</span><Link href="/marketplace">Marketplace <AlsatIcon name="arrow" size={14}/></Link><Link href="/warehouse">Қойма QR <AlsatIcon name="arrow" size={14}/></Link><Link href="/dispatcher">Экспедитор және маршрут <AlsatIcon name="arrow" size={14}/></Link><Link href="/admin">Alsat Admin <AlsatIcon name="arrow" size={14}/></Link></div>
       <div className="ws2-sidebar-user"><span>{companyName[0] || "A"}</span><div><strong>{companyName}</strong><small>{roleLabel(role)}</small></div></div>
       <button className="ws2-logout" onClick={() => void logout()} disabled={loggingOut}><WorkspaceIcon name="logout" />{loggingOut ? "Шығып жатыр…" : "Шығу"}</button>
     </aside>
@@ -455,7 +456,7 @@ function WorkspaceCustomers({ companyId, onChanged }: { companyId: string; onCha
 
 function WorkspaceModules() {
   const modules: Array<{ href: string; icon: IconName; title: string; text: string; tone: string }> = [
-    { href: "/", icon: "market", title: "Alsat Marketplace", text: "Жарияланған тауарлар мен B2B тапсырыстар", tone: "green" },
+    { href: "/marketplace", icon: "market", title: "Alsat Marketplace", text: "Жарияланған тауарлар мен B2B тапсырыстар", tone: "green" },
     { href: "/warehouse", icon: "warehouse", title: "Қойма және QR", text: "Жинау, стикер, QR арқылы тапсыру", tone: "blue" },
     { href: "/dispatcher", icon: "truck", title: "Экспедитор", text: "Маршрут, жанармай, чат және жеткізу", tone: "amber" },
     { href: "/admin", icon: "shield", title: "Alsat Admin", text: "Платформа, компаниялар және жүйе күйі", tone: "dark" },
@@ -465,25 +466,13 @@ function WorkspaceModules() {
 }
 
 function WorkspaceLogo({ compact = false }: { compact?: boolean }) {
-  return <div className={compact ? "ws2-logo compact" : "ws2-logo"}><span>A</span>{!compact && <div><b>ALSAT</b><small>WORKSPACE</small></div>}</div>;
+  return <div className={compact ? "ws2-logo compact" : "ws2-logo"}><AlsatBrand label="WORKSPACE" compact={compact} inverse={!compact}/></div>;
 }
 
 type IconName = "home" | "box" | "store" | "orders" | "agent" | "wallet" | "grid" | "logout" | "menu" | "bell" | "plus" | "market" | "warehouse" | "truck" | "shield";
-const iconPaths: Record<IconName, React.ReactNode> = {
-  home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10M9 20v-6h6v6" /></>,
-  box: <><path d="m4 7 8-4 8 4-8 4-8-4Z" /><path d="M4 7v10l8 4 8-4V7M12 11v10" /></>,
-  store: <><path d="M4 9h16l-2-5H6L4 9Z" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
-  orders: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 3v4h6V3M8 12h8M8 16h6" /></>,
-  agent: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-5 3.4-8 8-8s8 3 8 8" /></>,
-  wallet: <><path d="M3 6h16v14H3zM3 8h16M15 13h6v4h-6a2 2 0 0 1 0-4Z" /></>,
-  grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
-  logout: <><path d="M10 5H4v14h6M14 8l4 4-4 4M18 12H8" /></>,
-  menu: <path d="M4 7h16M4 12h16M4 17h16" />,
-  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>,
-  plus: <path d="M12 5v14M5 12h14" />,
-  market: <><path d="M3 9h18M5 9v11h14V9M7 4h10l2 5H5l2-5Z" /><path d="M9 20v-6h6v6" /></>,
-  warehouse: <><path d="M3 21V8l9-5 9 5v13M7 21v-9h10v9M7 16h10" /></>,
-  truck: <><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z" /><circle cx="7" cy="19" r="2" /><circle cx="18" cy="19" r="2" /></>,
-  shield: <><path d="M12 3 4 6v5c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-3Z" /><path d="m9 12 2 2 4-5" /></>,
+const workspaceIconMap: Record<IconName, AlsatIconName> = {
+  home: "home", box: "package", store: "store", orders: "orders", agent: "agent",
+  wallet: "wallet", grid: "catalog", logout: "logout", menu: "menu", bell: "bell",
+  plus: "plus", market: "marketplace", warehouse: "warehouse", truck: "truck", shield: "shield",
 };
-function WorkspaceIcon({ name }: { name: IconName }) { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{iconPaths[name]}</svg>; }
+function WorkspaceIcon({ name }: { name: IconName }) { return <AlsatIcon name={workspaceIconMap[name]} />; }

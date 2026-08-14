@@ -10,6 +10,7 @@ import {
 } from "../../lib/company-bootstrap";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 import { getWorkspaceIdentity } from "../../lib/workspace-auth";
+import { AlsatBrand } from "../../components/AlsatIcon";
 
 export default function WorkspaceSignupPage() {
   const [checking, setChecking] = useState(true);
@@ -169,5 +170,5 @@ export default function WorkspaceSignupPage() {
 }
 
 function Brand() {
-  return <Link className="brand" href="/promo"><span>А</span><b>alsat</b><em>workspace</em></Link>;
+  return <Link className="brand" href="/promo"><AlsatBrand label="WORKSPACE"/></Link>;
 }

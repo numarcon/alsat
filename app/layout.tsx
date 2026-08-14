@@ -2,9 +2,10 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import "./roles.css";
+import "./alsat-design.css";
 
-export const metadata: Metadata = { title: "Alsat Workspace — сатуды бір жүйеде басқарыңыз", description: "Компания, сауда өкілі, қойма және жеткізуді біріктіретін Қазақстан бизнесіне арналған B2B workspace.", applicationName: "Alsat Workspace", manifest: "/manifest.webmanifest" };
-export const viewport: Viewport = { themeColor: "#0878f9", width: "device-width", initialScale: 1 };
+export const metadata: Metadata = { title: { default: "Alsat — B2B сауда экожүйесі", template: "%s · Alsat" }, description: "Marketplace, Workspace, қойма және жеткізу — бизнеске арналған біртұтас Alsat экожүйесі.", applicationName: "Alsat", manifest: "/manifest.webmanifest" };
+export const viewport: Viewport = { themeColor: "#083528", width: "device-width", initialScale: 1 };
 const pwaRuntime = `(() => {
   const recoveryKey = "alsat-runtime-recovery-v5";
   const messageOf = value => String(value?.message || value?.reason?.message || value?.reason || value || "");

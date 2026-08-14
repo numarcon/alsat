@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { AlsatBrand } from "../../components/AlsatIcon";
 
 type LoginStep = "phone" | "otp";
 type LoginMode = "email" | "phone";
@@ -130,9 +131,7 @@ export default function AgentLogin() {
   return (
     <main className="qmart-login">
       <div className="qmart-login-brand">
-        <span className="qmark">A</span>
-        <b>ALSAT</b>
-        <small>САУДА ӨКІЛІ</small>
+        <AlsatBrand label="САУДА ӨКІЛІ" inverse/>
       </div>
 
       <div className="qmart-login-copy">

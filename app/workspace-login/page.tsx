@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import { bootstrapOwnerCompany, getPendingCompany, rememberCompany } from "../../lib/company-bootstrap";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 import { getWorkspaceIdentity, rolePath } from "../../lib/workspace-auth";
+import { AlsatBrand, AlsatIcon } from "../../components/AlsatIcon";
 
 export default function WorkspaceLoginPage() {
   const [email, setEmail] = useState("");
@@ -73,9 +74,7 @@ export default function WorkspaceLoginPage() {
   return (
     <main className="qmart-login workspace-owner-login">
       <Link className="qmart-login-brand" href="/promo">
-        <span className="qmark">A</span>
-        <b>ALSAT</b>
-        <small>WORKSPACE</small>
+        <AlsatBrand label="WORKSPACE" inverse/>
       </Link>
       <div className="qmart-login-copy">
         <h1>Workspace-қа кіру</h1>
@@ -90,7 +89,7 @@ export default function WorkspaceLoginPage() {
       <div className="qmart-or"><span>немесе</span></div>
       <Link className="demo-login" href="/workspace-signup">Жаңа компания тіркеу</Link>
       <Link className="forgot" href="/admin">Alsat Admin панеліне кіру</Link>
-      <small className="offline-note">◉ Деректер Supabase арқылы қорғалады</small>
+      <small className="offline-note"><AlsatIcon name="shield" size={15}/> Деректер Supabase арқылы қорғалады</small>
     </main>
   );
 }

@@ -1,15 +1,17 @@
 import Link from "next/link";
+import { AlsatBrand, AlsatIcon, AlsatMark, type AlsatIconName } from "../../components/AlsatIcon";
 import "./promo.css";
+import "./promo-v2.css";
 
 const Arrow = () => <span aria-hidden="true">→</span>;
 
-const features = [
-  { icon: "▦", tone: "blue", title: "Тауар және баға", text: "Каталогты, бағаны, қалдықты және жарияланымды бір жерден басқарыңыз." },
-  { icon: "♙", tone: "violet", title: "Сауда өкілдері", text: "Клиент базасы, тапсырыс, маршрут және комиссия — мобильді қосымшада." },
-  { icon: "◇", tone: "orange", title: "Қойма процесі", text: "Тапсырысты қабылдау, жинау, стикер мен накладнойды автоматты дайындау." },
-  { icon: "⌁", tone: "green", title: "Жеткізу және маршрут", text: "QR арқылы қабылдау, картадағы бағыт және жеткізілгенін растау." },
-  { icon: "↗", tone: "cyan", title: "Комиссия және есеп", text: "Сату, орташа чек, комиссия және команда нәтижесі нақты уақытта." },
-  { icon: "◎", tone: "navy", title: "Мультиюзер жүйе", text: "Компания, СӨ, қоймашы және экспедиторға бөлек рөл мен кабинет." },
+const features: Array<{ icon: AlsatIconName; tone: string; title: string; text: string }> = [
+  { icon: "package", tone: "blue", title: "Тауар және баға", text: "Каталогты, бағаны, қалдықты және жарияланымды бір жерден басқарыңыз." },
+  { icon: "agent", tone: "violet", title: "Сауда өкілдері", text: "Клиент базасы, тапсырыс, маршрут және комиссия — мобильді қосымшада." },
+  { icon: "warehouse", tone: "orange", title: "Қойма процесі", text: "Тапсырысты қабылдау, жинау, стикер мен накладнойды автоматты дайындау." },
+  { icon: "route", tone: "green", title: "Жеткізу және маршрут", text: "QR арқылы қабылдау, картадағы бағыт және жеткізілгенін растау." },
+  { icon: "chart", tone: "cyan", title: "Комиссия және есеп", text: "Сату, орташа чек, комиссия және команда нәтижесі нақты уақытта." },
+  { icon: "users", tone: "navy", title: "Мультиюзер жүйе", text: "Компания, СӨ, қоймашы және экспедиторға бөлек рөл мен кабинет." },
 ];
 
 const steps = [
@@ -23,10 +25,7 @@ export default function PromoPage() {
   return (
     <main className="promo-page">
       <header className="promo-header">
-        <Link className="promo-brand" href="/promo" aria-label="Alsat Workspace басты беті">
-          <span className="promo-brand-mark">A</span>
-          <span><b>ALSAT</b><small>WORKSPACE</small></span>
-        </Link>
+        <Link className="promo-brand" href="/promo" aria-label="Alsat Workspace басты беті"><AlsatBrand label="WORKSPACE"/></Link>
         <nav className="promo-nav" aria-label="Негізгі навигация">
           <a href="#features">Мүмкіндіктер</a>
           <a href="#workflow">Қалай жұмыс істейді?</a>
@@ -102,14 +101,14 @@ export default function PromoPage() {
       <section className="promo-section" id="features">
         <div className="promo-section-head"><div><span className="promo-eyebrow">БАРЛЫҒЫ БІР ЖЕРДЕ</span><h2>Күнделікті жұмысты<br />жеңілдететін құралдар</h2></div><p>Командаңызға бөлек бағдарламалар қажет емес. Alsat сатудың толық циклін бір-бірімен байланыстырады.</p></div>
         <div className="promo-feature-grid">
-          {features.map(feature => <article className="promo-feature" key={feature.title}><span className={`promo-feature-icon ${feature.tone}`}>{feature.icon}</span><h3>{feature.title}</h3><p>{feature.text}</p><a href="#workflow">Толығырақ <Arrow /></a></article>)}
+          {features.map(feature => <article className="promo-feature" key={feature.title}><span className={`promo-feature-icon ${feature.tone}`}><AlsatIcon name={feature.icon}/></span><h3>{feature.title}</h3><p>{feature.text}</p><a href="#workflow">Толығырақ <Arrow /></a></article>)}
         </div>
       </section>
 
       <section className="promo-workflow" id="workflow">
         <div className="promo-workflow-inner">
           <div className="promo-workflow-copy"><span className="promo-eyebrow light">БІР ТАПСЫРЫС — ТӨРТ РӨЛ</span><h2>Әркім өз жұмысын көреді.<br /><em>Бәрі бір нәтиже үшін.</em></h2><p>Ақпарат қолмен тасымалданбайды. Бір қызметкердің әрекеті келесі рөлдің кабинетінде автоматты түрде пайда болады.</p></div>
-          <div className="promo-flow-visual"><div className="flow-core"><span>A</span><b>ALSAT</b><small>БІР ДЕРЕК</small></div>{['СӨ','ҚОЙМА','ЖЕТКІЗУ','БАСШЫ'].map((role, index) => <div className={`flow-role role-${index+1}`} key={role}><i>{['♙','◇','⌁','↗'][index]}</i><b>{role}</b></div>)}</div>
+          <div className="promo-flow-visual"><div className="flow-core"><span><AlsatMark size={27}/></span><b>ALSAT</b><small>БІР ДЕРЕК</small></div>{(['agent','warehouse','truck','chart'] as AlsatIconName[]).map((icon, index) => <div className={`flow-role role-${index+1}`} key={icon}><i><AlsatIcon name={icon}/></i><b>{['СӨ','ҚОЙМА','ЖЕТКІЗУ','БАСШЫ'][index]}</b></div>)}</div>
           <div className="promo-steps">{steps.map(step => <article key={step.number}><span>{step.number}</span><small>{step.role}</small><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>
         </div>
       </section>
@@ -124,10 +123,10 @@ export default function PromoPage() {
       </section>
 
       <section className="promo-benefits">
-        <article><i>◉</i><div><b>Offline режим</b><span>Интернет болмаса да жұмыс жалғасады</span></div></article>
-        <article><i>↻</i><div><b>Нақты уақыт</b><span>Өзгерістер бірден барлық рөлге түседі</span></div></article>
-        <article><i>♢</i><div><b>Қауіпсіз дерек</b><span>Supabase негізіндегі қорғалған архитектура</span></div></article>
-        <article><i>□</i><div><b>PWA қосымша</b><span>Телефонға дүкеннен жүктемей орнатылады</span></div></article>
+        <article><i><AlsatIcon name="refresh"/></i><div><b>Offline режим</b><span>Интернет болмаса да жұмыс жалғасады</span></div></article>
+        <article><i><AlsatIcon name="clock"/></i><div><b>Нақты уақыт</b><span>Өзгерістер бірден барлық рөлге түседі</span></div></article>
+        <article><i><AlsatIcon name="shield"/></i><div><b>Қауіпсіз дерек</b><span>Supabase негізіндегі қорғалған архитектура</span></div></article>
+        <article><i><AlsatIcon name="phone"/></i><div><b>PWA қосымша</b><span>Телефонға дүкеннен жүктемей орнатылады</span></div></article>
       </section>
 
       <section className="promo-final-cta">
@@ -136,7 +135,7 @@ export default function PromoPage() {
         <div><Link className="promo-button promo-button-white" href="/workspace-signup">Тегін Workspace ашу <Arrow /></Link><Link className="promo-cta-login" href="/workspace-login">Аккаунтым бар — кіру</Link></div>
       </section>
 
-      <footer className="promo-footer"><Link className="promo-brand" href="/promo"><span className="promo-brand-mark">A</span><span><b>ALSAT</b><small>WORKSPACE</small></span></Link><p>Қазақстан бизнесіне арналған сату және дистрибуция платформасы.</p><span>© 2026 Alsat Workspace</span></footer>
+      <footer className="promo-footer"><Link className="promo-brand" href="/promo"><AlsatBrand label="WORKSPACE"/></Link><p>Қазақстан бизнесіне арналған сату және дистрибуция платформасы.</p><span>© 2026 Alsat Workspace</span></footer>
     </main>
   );
 }

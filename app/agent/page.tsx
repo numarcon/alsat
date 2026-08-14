@@ -6,6 +6,7 @@ import LocationPicker, { LocationValue } from "../../components/LocationPicker";
 import { queueOfflineAction } from "../../lib/offline-queue";
 import { supabase } from "../../lib/supabase";
 import { flushOrderQueue } from "../../lib/order-sync";
+import { AlsatIcon, AlsatMark } from "../../components/AlsatIcon";
 
 type Screen = "dashboard" | "clients" | "new-store" | "client" | "catalog" | "order" | "orders" | "detail" | "route" | "visit" | "reports" | "profile" | "notifications" | "more";
 type Product = { id: number | string; name: string; subtitle: string; price: number; stock: number };
@@ -162,7 +163,7 @@ export default function AgentApp() {
   if (!accessChecked) return <main className="qmart-suite"><section className="suite-screen"><div className="empty">Қолжетімділік тексерілуде…</div></section></main>;
 
   return <main className="qmart-suite">
-    <header className="suite-header"><button className="icon-button" onClick={() => go("more")}>☰</button><div className="suite-brand"><b>ALSAT</b><small>САУДА ӨКІЛІ</small></div><button className="icon-button" onClick={() => go("notifications")} aria-label="Хабарламалар">♧</button></header>
+    <header className="suite-header"><button className="icon-button" onClick={() => go("more")}><AlsatIcon name="menu"/></button><div className="suite-brand"><AlsatMark size={27}/><span><b>ALSAT</b><small>САУДА ӨКІЛІ</small></span></div><button className="icon-button" onClick={() => go("notifications")} aria-label="Хабарламалар"><AlsatIcon name="bell"/></button></header>
     {screen === "dashboard" && <Dashboard go={go} syncState={syncState} />}
     {screen === "clients" && <Clients clients={storeNames} go={go} onAdd={() => go("new-store")} onSelect={(name) => { setSelectedClient(name); go("client"); }} />}
     {screen === "new-store" && <NewStoreForm onCancel={() => go("clients")} onSave={addStore} />}
@@ -177,7 +178,7 @@ export default function AgentApp() {
     {screen === "profile" && <Profile go={go} />}
     {screen === "notifications" && <AgentNotifications go={go} />}
     {screen === "more" && <More go={go} />}
-    <nav className="suite-bottom"><button className={screen === "dashboard" ? "active" : ""} onClick={() => go("dashboard")}>⌂<small>Басты</small></button><button className={screen === "clients" || screen === "new-store" || screen === "client" ? "active" : ""} onClick={() => go("clients")}>♙<small>Клиенттер</small></button><button className={screen === "orders" || screen === "order" || screen === "detail" ? "active" : ""} onClick={() => go("orders")}>▤<small>Тапсырыстар</small></button><button className={screen === "reports" ? "active" : ""} onClick={() => go("reports")}>▥<small>Есеп</small></button><button className={screen === "more" || screen === "profile" ? "active" : ""} onClick={() => go("more")}>•••<small>Көбірек</small></button></nav>
+    <nav className="suite-bottom"><button className={screen === "dashboard" ? "active" : ""} onClick={() => go("dashboard")}><AlsatIcon name="home"/><small>Басты</small></button><button className={screen === "clients" || screen === "new-store" || screen === "client" ? "active" : ""} onClick={() => go("clients")}><AlsatIcon name="store"/><small>Клиенттер</small></button><button className={screen === "orders" || screen === "order" || screen === "detail" ? "active" : ""} onClick={() => go("orders")}><AlsatIcon name="orders"/><small>Тапсырыстар</small></button><button className={screen === "reports" ? "active" : ""} onClick={() => go("reports")}><AlsatIcon name="chart"/><small>Есеп</small></button><button className={screen === "more" || screen === "profile" ? "active" : ""} onClick={() => go("more")}><AlsatIcon name="settings"/><small>Көбірек</small></button></nav>
   </main>;
 }
 

@@ -21,7 +21,14 @@ type CatalogProduct = {
 type CheckoutStore = { id: string; name: string; address: string; contactName: string; phone: string };
 
 const cartStorageKey = "alsat-marketplace-cart-v1";
-const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
+const money = {
+  format(value: number) {
+    const rounded = Math.round(Number(value) || 0);
+    const sign = rounded < 0 ? "−" : "";
+    const digits = Math.abs(rounded).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    return `${sign}${digits} ₸`;
+  },
+};
 const categories = ["Барлығы", "Шамдар", "Прожекторлар", "Панельдер", "Розеткалар", "Автоматика"];
 const demoProducts: CatalogProduct[] = [
   { id: "demo-a60", name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", price: 650, stock: 1250, category: "Шамдар", description: "Күнделікті саудаға арналған үнемді LED шам.", imageUrl: "", minOrder: 1 },

@@ -8,7 +8,7 @@ type Forwarder = { id: string; full_name: string };
 type Product = { id: string; name: string; price: number };
 type Order = { id: string; customer_id: string | null; warehouse_id: string | null; forwarder_id: string | null; status: string; payment_status: string; total: number; source: string };
 
-const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
+const money = { format: (value: number) => `${Math.round(Number(value) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ")} ₸` };
 const statuses = ["draft", "submitted", "confirmed", "picking", "out_for_delivery", "delivered", "cancelled"];
 const statusLabels: Record<string, string> = { draft: "Жоба", submitted: "Жіберілді", confirmed: "Бекітілді", picking: "Жиналуда", out_for_delivery: "Жеткізілуде", delivered: "Жеткізілді", cancelled: "Бас тартылды" };
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Commission = { id: string; order_id: string; rate: number; amount: number; status: string; earned_at: string; sales_agents: { full_name: string } | Array<{ full_name: string }> | null };
-const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
+const money = { format: (value: number) => `${Math.round(Number(value) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ")} ₸` };
 
 export default function CompanyCommissions({ companyId }: { companyId: string | null }) {
   const [rows, setRows] = useState<Commission[]>([]);

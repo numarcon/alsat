@@ -2,7 +2,7 @@
 
 type Product = { id: number; name: string; sku: string; price: number; purchasePrice?: number; salePrice?: number; wholesalePrice?: number; imageUrl?: string; stock: number; commission: number; workspace: boolean; agents: boolean; marketplace: boolean };
 
-const money = (value: number) => `${value.toLocaleString("kk-KZ")} ₸`;
+const money = (value: number) => `${Math.round(Number(value) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ")} ₸`;
 
 export default function ProductListEnhanced({ products, onAdd, onToggle, onEdit, onDelete }: { products: Product[]; onAdd: () => void; onToggle: (id: number, field: "workspace" | "agents" | "marketplace") => void; onEdit: (product: Product) => void; onDelete: (product: Product) => void }) {
   return <>

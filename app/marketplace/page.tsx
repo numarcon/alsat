@@ -35,13 +35,39 @@ const money = {
   },
 };
 const demoProducts: CatalogProduct[] = [
-  { id: "demo-phone", name: "Samsung Galaxy A56 5G 256 GB", sku: "SAM-A56-256", price: 239990, stock: 45, category: "Электроника және техника", subcategory: "Смартфондар және аксессуарлар", brand: "Samsung", description: "Күнделікті бизнес пен байланысқа арналған 5G смартфон.", imageUrl: "", imageUrls: [], minOrder: 1, unit: "дана", bulletPoints: ["256 GB жад", "5G байланысы"] },
-  { id: "demo-lamp", name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", price: 650, stock: 1250, category: "Құрылыс және жөндеу", subcategory: "Электр тауарлары", brand: "KRAUSZ", description: "Күнделікті саудаға арналған үнемді LED шам.", imageUrl: "", imageUrls: [], minOrder: 10, unit: "дана", bulletPoints: ["12 W", "6500 K"] },
-  { id: "demo-coffee", name: "Arabica кофе дәні 1 кг", sku: "COF-ARA-1KG", price: 7950, stock: 220, category: "Азық-түлік және сусындар", subcategory: "Бакалея", brand: "Alsat Select", description: "HoReCa және кеңселерге арналған қуырылған арабика дәні.", imageUrl: "", imageUrls: [], minOrder: 4, unit: "қаптама", bulletPoints: ["100% Arabica", "1 кг"] },
-  { id: "demo-chair", name: "Эргономикалық кеңсе орындығы", sku: "CHR-ERG-BLK", price: 68900, stock: 32, category: "Үй, жиһаз және бақша", subcategory: "Жиһаз", brand: "OfficePro", description: "Бел тірегі мен реттелетін механизмдері бар кеңсе орындығы.", imageUrl: "", imageUrls: [], minOrder: 1, unit: "дана", bulletPoints: ["Бел тірегі", "120 кг дейін"] },
-  { id: "demo-glove", name: "Қорғаныс қолғаптары, 12 жұп", sku: "PPE-GLV-12", price: 5400, stock: 310, category: "Өнеркәсіп және бизнес", subcategory: "Қауіпсіздік және қорғаныс", brand: "SafeWork", description: "Қойма және өндіріс жұмысына арналған қорғаныс қолғаптары.", imageUrl: "", imageUrls: [], minOrder: 2, unit: "қаптама", bulletPoints: ["12 жұп", "Сырғанамайтын жабын"] },
-  { id: "demo-shirt", name: "Ерлерге арналған классикалық жейде", sku: "SHR-CL-WHT", price: 12900, stock: 85, category: "Киім, аяқ киім және аксессуарлар", subcategory: "Ерлер киімі", brand: "Qazaq Basic", description: "Кеңсе мен күнделікті киюге арналған мақта жейде.", imageUrl: "", imageUrls: [], minOrder: 3, unit: "дана", bulletPoints: ["100% мақта", "S–XXL"] },
+  { id: "demo-drill", name: "Bosch Professional GBH 2-26 DRE", sku: "BOS-GBH-226", price: 102500, stock: 24, category: "Құрылыс және жөндеу", subcategory: "Электр құралдары", brand: "Bosch", description: "Кәсіби құрылыс жұмыстарына арналған қуатты перфоратор.", imageUrl: "", imageUrls: [], minOrder: 1, unit: "дана", bulletPoints: ["800 W", "SDS-plus"] },
+  { id: "demo-tape", name: "Қаптама таспасы 48 мм × 50 м", sku: "PACK-TAPE-4850", price: 1250, stock: 460, category: "Өнеркәсіп және бизнес", subcategory: "Қаптама және ыдыстар", brand: "Alsat Pack", description: "Қойма, дүкен және тасымалдауға арналған берік қаптама таспасы.", imageUrl: "", imageUrls: [], minOrder: 6, unit: "дана", bulletPoints: ["48 мм", "50 м"] },
+  { id: "demo-paper", name: "A4 қағазы, 80 г/м², 500 парақ", sku: "OFF-A4-80500", price: 2300, stock: 780, category: "Үй, жиһаз және бақша", subcategory: "Кеңсе және қағаз өнімдері", brand: "Office Line", description: "Күнделікті басып шығаруға арналған ақ кеңсе қағазы.", imageUrl: "", imageUrls: [], minOrder: 5, unit: "қаптама", bulletPoints: ["A4", "500 парақ"] },
+  { id: "demo-gloves", name: "Жұмыс қолғаптары", sku: "SAFE-GLOVE-GRY", price: 860, stock: 310, category: "Өнеркәсіп және бизнес", subcategory: "Қауіпсіздік және қорғаныс", brand: "SafeWork", description: "Қойма және өндірістік жұмыстарға арналған қорғаныс қолғаптары.", imageUrl: "", imageUrls: [], minOrder: 12, unit: "жұп", bulletPoints: ["Сырғанамайтын жабын", "Әмбебап өлшем"] },
+  { id: "demo-coffee", name: "Кофе Jacobs Monarch, 200 г", sku: "JAC-MON-200", price: 2980, stock: 220, category: "Азық-түлік және сусындар", subcategory: "Бакалея", brand: "Jacobs", description: "Кеңсе, дүкен және HoReCa үшін еритін кофе.", imageUrl: "", imageUrls: [], minOrder: 4, unit: "дана", bulletPoints: ["200 г", "Еритін кофе"] },
 ];
+
+const popularCategories = [
+  { title: "Өнеркәсіп жабдықтары", category: "Өнеркәсіп және бизнес", icon: "⚙" },
+  { title: "Құрылыс және жөндеу", category: "Құрылыс және жөндеу", icon: "▦" },
+  { title: "Электроника және техника", category: "Электроника және техника", icon: "⌁" },
+  { title: "Кеңсе және қағаз өнімдері", category: "Үй, жиһаз және бақша", icon: "▤" },
+  { title: "Тұрмыстық тауарлар және химия", category: "Үй, жиһаз және бақша", icon: "♧" },
+  { title: "Қаптама және ыдыстар", category: "Өнеркәсіп және бизнес", icon: "▣" },
+  { title: "Киім және қорғаныс құралдары", category: "Өнеркәсіп және бизнес", icon: "♙" },
+  { title: "Азық-түлік және сусындар", category: "Азық-түлік және сусындар", icon: "▥" },
+] as const;
+
+const trustBenefits = [
+  { icon: "⌾", title: "Сенімді жеткізушілер", text: "Тексерілген серіктестер" },
+  { icon: "♢", title: "Ыңғайлы шарттар", text: "Ең жақсы бағалар" },
+  { icon: "▱", title: "Жылдам жеткізу", text: "Уақытында және сапалы" },
+  { icon: "▣", title: "Қауіпсіз төлем", text: "100% қорғаныс" },
+] as const;
+
+const platformBenefits = [
+  { icon: "⌬", title: "B2B үшін арнайы", text: "Шағын және орта бизнеске арналған шешімдер" },
+  { icon: "◎", title: "Кең таңдау", text: "Мыңдаған тауар және жеткізушілер" },
+  { icon: "♙", title: "Жеке менеджер", text: "Сізге жеке қолдау көрсетеміз" },
+  { icon: "◌", title: "Ыңғайлы интерфейс", text: "Тез іздеу және оңай тапсырыс беру" },
+] as const;
+
+const brandNames = ["BOSCH", "3M", "Makita", "TORK", "PHILIPS", "NESCAFÉ"];
 
 function normalizeProduct(row: Record<string, unknown>): CatalogProduct {
   return {
@@ -118,7 +144,6 @@ export default function MarketplacePage() {
       } else {
         setProducts(demoProducts);
         setUsingDemo(true);
-        setNotice("Marketplace-те жарияланған нақты тауар әзірге жоқ. Қазір демо каталог көрсетіліп тұр.");
       }
       setLoading(false);
     }
@@ -126,8 +151,6 @@ export default function MarketplacePage() {
     return () => { active = false; };
   }, []);
 
-  const categories = useMemo(() => ["Барлығы", ...Array.from(new Set(products.map((product) => product.category))).sort()], [products]);
-  const subcategories = useMemo(() => ["Барлығы", ...Array.from(new Set(products.filter((product) => category === "Барлығы" || product.category === category).map((product) => product.subcategory))).sort()], [category, products]);
   const visibleProducts = useMemo(() => products.filter((product) => {
     const matchesQuery = `${product.name} ${product.sku} ${product.brand} ${product.category} ${product.subcategory}`.toLowerCase().includes(query.toLowerCase());
     const matchesCategory = category === "Барлығы" || product.category === category;
@@ -221,32 +244,54 @@ export default function MarketplacePage() {
   }
 
   return <main className="marketplace-shell">
-    <header className="marketplace-header">
-      <Link className="marketplace-logo" href="/"><span>A</span><div><strong>ALSAT</strong><small>MARKETPLACE</small></div></Link>
-      <nav><a href="#catalog">Каталог</a><a href="#benefits">Артықшылықтар</a><Link href="/promo">Alsat туралы</Link></nav>
-      <div className="marketplace-header-actions"><Link className="marketplace-login" href="/workspace-login">Workspace-ке кіру</Link><button className="cart-button" onClick={() => setCartOpen(true)}>Себет <b>{cartCount}</b></button></div>
-    </header>
+    <div className="marketplace-page">
+      <header className="marketplace-header">
+        <Link className="marketplace-logo" href="/" aria-label="Alsat Marketplace басты беті"><span className="alsat-mark"/><div><strong>ALSAT</strong><small>MARKETPLACE</small></div></Link>
+        <button className="catalog-menu-button" onClick={() => document.getElementById("popular-categories")?.scrollIntoView({ behavior: "smooth" })}><span>☰</span>Каталог</button>
+        <label className="marketplace-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Тауарларды іздеу"/><span>⌕</span></label>
+        <div className="marketplace-header-actions"><button className="language-button">KZ⌄</button><button className="header-icon" aria-label="Таңдаулылар">♡</button><button className="header-icon header-cart" onClick={() => setCartOpen(true)} aria-label="Себет">♧{cartCount > 0 && <b>{cartCount}</b>}</button><Link className="marketplace-login" href="/workspace-login">Кіру / Тіркелу</Link></div>
+      </header>
 
-    <section className="marketplace-hero">
-      <div><span className="marketplace-kicker">ALSAT B2B MARKETPLACE</span><h1>Бизнеске керек барлық тауарды көтерме бағамен алыңыз.</h1><p>Барлық категориядағы тексерілген жеткізушілер, нақты қалдық және бақыланатын қойма-жеткізу процесі.</p><div className="marketplace-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Тауар, бренд, SKU немесе категория іздеу"/><kbd>⌘ K</kbd></div></div>
-      <div className="marketplace-hero-card"><span>Бүгінгі ұсыныс</span><strong>Көтерме бағалар</strong><small>Дүкеніңізге керек тауарды тиімді бағамен алыңыз.</small><a href="#catalog">Каталогты ашу →</a></div>
-    </section>
+      <div className="mobile-search-row"><label className="marketplace-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Тауарларды іздеу"/><span>⌕</span></label></div>
 
-    <section className="marketplace-benefits" id="benefits"><div><span>01</span><strong>Нақты қалдық</strong><small>Қоймадағы қолжетімді санды бірден көресіз.</small></div><div><span>02</span><strong>Жылдам тапсырыс</strong><small>Себеттен тапсырысқа бірнеше қадам.</small></div><div><span>03</span><strong>Бақыланатын жеткізу</strong><small>QR және карта арқылы барлық кезең көрінеді.</small></div></section>
+      <section className="marketplace-hero">
+        <div className="hero-copy"><h1>Бизнесіңе арналған<br/>бәрі бір жерде</h1><p>Алсат маркетплейсі – бизнесті дамытуға арналған сенімді B2B платформа</p><div className="hero-actions desktop-hero-actions"><a className="primary-cta" href="#offers">Каталогты қарау</a><Link className="secondary-cta" href="/workspace-signup">Жеткізуші болу</Link></div></div>
+        <div className="hero-visual"><img src="/marketplace/hero-container-v1.png" alt="Жасыл жүк контейнері және тауар қораптары"/><div className="container-brand"><span className="alsat-mark white"/><b>ALSAT<small>MARKETPLACE</small></b></div></div>
+        <div className="hero-actions mobile-hero-actions"><a className="primary-cta" href="#offers">Каталогты қарау</a><Link className="secondary-cta" href="/workspace-signup">Жеткізуші болу</Link></div>
+      </section>
 
-    <section className="marketplace-catalog" id="catalog">
-      <div className="marketplace-section-head"><div><span className="marketplace-kicker">КАТАЛОГ</span><h2>Сұраныстағы тауарлар</h2></div><span className="catalog-count">{visibleProducts.length} тауар</span></div>
-      <div className="marketplace-chips">{categories.map((item) => <button className={category === item ? "active" : ""} key={item} onClick={() => { setCategory(item); setSubcategory("Барлығы"); }}>{item}</button>)}</div>
-      <div className="marketplace-subcategory-filter"><label>Подкатегория<select value={subcategory} onChange={(event) => setSubcategory(event.target.value)}>{subcategories.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><span>{category === "Барлығы" ? "Барлық категория" : category}</span></div>
-      {loading && <div className="marketplace-loading">Каталог жүктелуде…</div>}
-      {!loading && !visibleProducts.length && <div className="marketplace-empty"><strong>Тауар табылмады</strong><span>Іздеу сөзін немесе категорияны өзгертіп көріңіз.</span></div>}
-      <div className="marketplace-grid">{visibleProducts.map((product) => <article className="marketplace-product-card" key={product.id}>
-        <button className="product-visual" onClick={() => setSelected(product)} aria-label={`${product.name} карточкасын ашу`}>{product.imageUrl ? <img src={product.imageUrl} alt=""/> : <span>▣</span>}</button>
-        <div className="product-card-copy"><span className="product-category">{product.category} · {product.subcategory}</span><h3>{product.name}</h3><small>{product.brand ? `${product.brand} · ` : ""}SKU: {product.sku}</small><div className="product-card-bottom"><div><strong>{money.format(product.price)}</strong><span>Қалдық: {product.stock} {product.unit}</span></div><button onClick={() => addToCart(product)} aria-label={`${product.name} себетке қосу`}>+</button></div></div>
-      </article>)}</div>
-    </section>
+      <section className="trust-strip" id="benefits">{trustBenefits.map((item) => <article key={item.title}><i>{item.icon}</i><div><strong>{item.title}</strong><span>{item.text}</span></div><b>›</b></article>)}</section>
 
-    <footer className="marketplace-footer"><div><strong>ALSAT</strong><span>Барлық тауар категориясына арналған B2B marketplace.</span></div><Link href="/workspace-signup">Серіктес болу →</Link></footer>
+      <section className="marketplace-section categories-section" id="popular-categories">
+        <div className="marketplace-section-head"><h2>Популярлы категориялар</h2><button onClick={() => { setCategory("Барлығы"); setSubcategory("Барлығы"); document.getElementById("offers")?.scrollIntoView({ behavior: "smooth" }); }}>Барлық категориялар</button></div>
+        <div className="popular-category-grid">{popularCategories.map((item, index) => <button key={item.title} className={category === item.category ? "category-card active" : "category-card"} onClick={() => { setCategory(item.category); setSubcategory("Барлығы"); document.getElementById("offers")?.scrollIntoView({ behavior: "smooth" }); }}><span className={`category-art category-art-${index}`}/><i>{item.icon}</i><strong>{item.title}</strong></button>)}</div>
+      </section>
+
+      <section className="why-section marketplace-section">
+        <h2>Неге Алсат маркетплейсі?</h2>
+        <div className="why-grid">{platformBenefits.map((item) => <article key={item.title}><i>{item.icon}</i><div><strong>{item.title}</strong><span>{item.text}</span></div></article>)}</div>
+      </section>
+
+      <section className="supplier-banner"><div><h2>Жеткізуші болыңыз<br/>және бизнесіңізді өсіріңіз</h2><p>Алсат маркетплейсінде өз тауарларыңызды ұсыныңыз және жаңа клиенттерге қол жеткізіңіз</p><Link href="/workspace-signup">Толығырақ</Link></div></section>
+
+      <section className="marketplace-section offers-section" id="offers">
+        <div className="marketplace-section-head"><div><h2>Танымал ұсыныстар</h2>{category !== "Барлығы" && <span>{category}</span>}</div><button onClick={() => { setCategory("Барлығы"); setSubcategory("Барлығы"); }}>Барлығын көру</button></div>
+        {loading && <div className="marketplace-loading">Каталог жүктелуде…</div>}
+        {!loading && !visibleProducts.length && <div className="marketplace-empty"><strong>Тауар табылмады</strong><span>Іздеу сөзін немесе категорияны өзгертіп көріңіз.</span><button onClick={() => { setQuery(""); setCategory("Барлығы"); }}>Барлығын көрсету</button></div>}
+        <div className="showcase-grid">{visibleProducts.slice(0, 5).map((product, index) => <article className="showcase-card" key={product.id}><button className="favorite-button" aria-label="Таңдаулыларға қосу">♡</button><button className={product.imageUrl ? "showcase-visual has-image" : `showcase-visual showcase-art-${index % 5}`} onClick={() => setSelected(product)} aria-label={`${product.name} карточкасын ашу`}>{product.imageUrl && <img src={product.imageUrl} alt=""/>}</button><div className="showcase-copy"><small>{product.brand || product.category}</small><h3>{product.name}</h3><span>{product.minOrder > 1 ? `Мин. ${product.minOrder} ${product.unit}` : product.subcategory}</span><strong>{money.format(product.price)}</strong><button onClick={() => addToCart(product)}>Себетке қосу</button></div></article>)}</div>
+        <div className="slider-dots"><i className="active"/><i/><i/></div>
+      </section>
+
+      <section className="brand-section marketplace-section"><div className="marketplace-section-head"><h2>Сенімді брендтер</h2><div><button aria-label="Алдыңғы бренд">‹</button><button aria-label="Келесі бренд">›</button></div></div><div className="brand-rail">{brandNames.map((brand) => <strong key={brand}>{brand}</strong>)}</div><div className="slider-dots"><i className="active"/><i/><i/></div></section>
+
+      <footer className="marketplace-footer">
+        <div className="footer-grid"><div className="footer-brand"><Link className="marketplace-logo light" href="/"><span className="alsat-mark white"/><div><strong>ALSAT</strong><small>MARKETPLACE</small></div></Link><p>Алсат маркетплейсі – бизнеске арналған сенімді B2B платформа</p><div className="socials"><span>f</span><span>◎</span><span>in</span></div></div><div><strong>Компания</strong><Link href="/promo">Біз туралы</Link><Link href="/workspace-signup">Жеткізушілерге</Link><Link href="/legal/terms">Платформа ережелері</Link><Link href="/legal/offer">Жария оферта</Link></div><div><strong>Көмек</strong><Link href="/legal/payment">Төлем және қауіпсіздік</Link><Link href="/legal/delivery">Жеткізу шарттары</Link><Link href="/legal/refund">Қайтару және бас тарту</Link><Link href="/legal/contacts">Байланыс</Link></div><div><strong>Жеке кабинет</strong><Link href="/workspace-login">Тапсырыстарым</Link><Link href="/workspace-login">Таңдаулылар</Link><Link href="/workspace-login">Хабарламалар</Link><Link href="/workspace-login">Профиль</Link></div><div className="footer-contacts"><strong>Байланыс</strong><a href="tel:+77003003009">+7 (700) 300-30-09</a><a href="mailto:info@alsat.kz">info@alsat.kz</a><span>Алматы қ., Айналмалы көшесі, 69А</span><span>Дс–Жм: 09:00–18:00</span></div></div>
+        <div className="legal-requisites"><strong>Жүйе иесі: «Krausz &amp; Deisler» ЖШС</strong><span>БСН 090740009232</span><span>Қазақстан Республикасы, Алматы қ., Айналмалы көшесі, 69А</span><span>Тел.: +7 (700) 300-30-09</span><span>Email: info@alsat.kz</span></div>
+        <div className="payment-readiness"><div><b>Freedom Pay</b><span>Интернет-эквайрингке дайын</span></div><span>Төлемдер теңгемен жүргізіледі. Карта деректері Alsat серверлерінде сақталмайды; төлем қосылғаннан кейін Freedom Pay қорғалған бетінде өңделеді.</span></div>
+        <div className="footer-bottom"><span>© 2026 Alsat Marketplace. Барлық құқықтар қорғалған.</span><div><Link href="/legal/offer">Пайдаланушы келісімі</Link><Link href="/legal/privacy">Құпиялық саясаты</Link><Link href="/legal/cookies">Cookie саясаты</Link></div></div>
+      </footer>
+    </div>
+    <nav className="mobile-marketplace-nav"><a href="#" className="active"><i>⌂</i><span>Басты бет</span></a><a href="#popular-categories"><i>▦</i><span>Каталог</span></a><button onClick={() => setCartOpen(true)}><i>♧</i><span>Себет</span>{cartCount > 0 && <b>{cartCount}</b>}</button><button><i>♡</i><span>Таңдаулар</span></button><Link href="/workspace-login"><i>♙</i><span>Профиль</span></Link></nav>
     {notice && <div className="marketplace-toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
 
     {selected && <div className="marketplace-overlay" onClick={() => setSelected(null)}><section className="marketplace-modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setSelected(null)}>×</button><div className="modal-product-visual">{selected.imageUrl ? <img src={selected.imageUrl} alt=""/> : <span>▣</span>}</div><span className="product-category">{selected.category} · {selected.subcategory}</span><h2>{selected.name}</h2>{selected.brand && <strong className="modal-brand">{selected.brand}</strong>}<p>{selected.description}</p>{selected.bulletPoints.length > 0 && <ul className="modal-bullets">{selected.bulletPoints.map((item) => <li key={item}>{item}</li>)}</ul>}<div className="modal-meta"><span>SKU <b>{selected.sku}</b></span><span>Қалдық <b>{selected.stock} {selected.unit}</b></span><span>Минимум <b>{selected.minOrder} {selected.unit}</b></span></div><strong className="modal-price">{money.format(selected.price)}</strong><button className="modal-primary" onClick={() => { addToCart(selected); setSelected(null); setCartOpen(true); }}>Себетке қосу →</button></section></div>}

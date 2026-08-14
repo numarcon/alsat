@@ -39,5 +39,5 @@ export function roleLabel(role: WorkspaceRole) {
 }
 
 export function rolePath(role: WorkspaceRole) {
-  return { owner: "/", admin: "/", manager: "/", warehouse: "/warehouse", forwarder: "/dispatcher" }[role];
+  return { owner: "/workspace", admin: "/workspace", manager: "/workspace", warehouse: "/warehouse", forwarder: "/dispatcher" }[role];
 }

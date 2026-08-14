@@ -36,7 +36,7 @@ export default function WorkspaceLoginPage() {
       const pending = getPendingCompany();
       if (pending) {
         await bootstrapOwnerCompany(data.user.id, pending);
-        window.location.href = "/";
+        window.location.href = "/workspace";
         return;
       }
 
@@ -45,7 +45,7 @@ export default function WorkspaceLoginPage() {
       if (owner) {
         const { data: company } = await supabase.from("companies").select("name").eq("id", owner.company_id).single();
         rememberCompany(owner.company_id, company?.name ?? "Компания Workspace");
-        window.location.href = "/";
+        window.location.href = "/workspace";
         return;
       }
 

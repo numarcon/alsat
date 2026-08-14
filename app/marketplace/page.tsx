@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
@@ -21,7 +21,14 @@ type CatalogProduct = {
 type CheckoutStore = { id: string; name: string; address: string; contactName: string; phone: string };
 
 const cartStorageKey = "alsat-marketplace-cart-v1";
-const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
+const money = {
+  format(value: number) {
+    const rounded = Math.round(Number(value) || 0);
+    const sign = rounded < 0 ? "−" : "";
+    const digits = Math.abs(rounded).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    return `${sign}${digits} ₸`;
+  },
+};
 const categories = ["Барлығы", "Шамдар", "Прожекторлар", "Панельдер", "Розеткалар", "Автоматика"];
 const demoProducts: CatalogProduct[] = [
   { id: "demo-a60", name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", price: 650, stock: 1250, category: "Шамдар", description: "Күнделікті саудаға арналған үнемді LED шам.", imageUrl: "", minOrder: 1 },
@@ -154,7 +161,7 @@ export default function MarketplacePage() {
     }
     setCheckoutLoading(true);
     const identity = await getWorkspaceIdentity();
-    const membership = identity.memberships.find((item) => item.company_id === companyIds[0] && (item.role === "owner" || item.role === "sales_agent"));
+    const membership = identity.memberships.find((item) => item.company_id === companyIds[0] && ["owner", "admin", "manager"].includes(item.role));
     if (!identity.user || !membership) {
       setCheckoutError("Бұл Marketplace тапсырысын жіберу үшін тиісті Alsat Workspace-ке кіріңіз.");
       setCheckoutOpen(true);
@@ -162,7 +169,7 @@ export default function MarketplacePage() {
       return;
     }
     setSellerCompanyId(membership.company_id);
-    const { data, error } = await supabase.from("stores").select("id,name,address,contact_name,phone").eq("company_id", membership.company_id).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("customers").select("id,name,address,contact_name,phone").eq("company_id", membership.company_id).order("created_at", { ascending: false });
     if (error) setCheckoutError(error.message);
     const stores = (data ?? []).map((store) => ({ id: store.id, name: store.name, address: store.address ?? "", contactName: store.contact_name ?? "", phone: store.phone ?? "" }));
     setCheckoutStores(stores);
@@ -181,13 +188,13 @@ export default function MarketplacePage() {
       let storeId = selectedStoreId;
       if (!storeId) {
         if (!newStore.name.trim() || !newStore.address.trim() || !newStore.phone.trim()) throw new Error("Дүкен атауы, мекенжайы және телефон нөмірі міндетті.");
-        const { data: createdStore, error: storeError } = await supabase.from("stores").insert({ company_id: sellerCompanyId, name: newStore.name.trim(), address: newStore.address.trim(), contact_name: newStore.contactName.trim() || null, phone: newStore.phone.trim() }).select("id").single();
+        const { data: createdStore, error: storeError } = await supabase.from("customers").insert({ company_id: sellerCompanyId, name: newStore.name.trim(), address: newStore.address.trim(), contact_name: newStore.contactName.trim() || null, phone: newStore.phone.trim() }).select("id").single();
         if (storeError || !createdStore) throw new Error(storeError?.message || "Дүкенді сақтау мүмкін болмады.");
         storeId = createdStore.id;
       }
-      const { data: order, error: orderError } = await supabase.from("orders").insert({ company_id: sellerCompanyId, store_id: storeId, status: "new", warehouse_status: "new", total: cartTotal, source: "marketplace", marketplace_note: checkoutNote.trim() || null }).select("id").single();
+      const { data: order, error: orderError } = await supabase.from("orders").insert({ company_id: sellerCompanyId, customer_id: storeId, status: "new", warehouse_status: "new", total: cartTotal, source: "marketplace", marketplace_note: checkoutNote.trim() || null }).select("id").single();
       if (orderError || !order) throw new Error(orderError?.message || "Тапсырысты сақтау мүмкін болмады.");
-      const { error: itemsError } = await supabase.from("order_items").insert(cartLines.map((line) => ({ order_id: order.id, product_id: line.product.id, quantity: line.quantity, unit_price: line.product.price, commission_amount: 0 })));
+      const { error: itemsError } = await supabase.from("order_items").insert(cartLines.map((line) => ({ company_id: sellerCompanyId, order_id: order.id, product_id: line.product.id, quantity: line.quantity, unit_price: line.product.price, commission_amount: 0 })));
       if (itemsError) throw new Error(`Тапсырыс жасалды, бірақ тауар жолдары сақталмады: ${itemsError.message}`);
       setCart({});
       setCheckoutSuccess(order.id.slice(0, 8).toUpperCase());
@@ -232,3 +239,4 @@ export default function MarketplacePage() {
     {usingDemo && <div className="marketplace-demo-badge">Демо каталог</div>}
   </main>;
 }
+

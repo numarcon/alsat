@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
@@ -20,7 +20,7 @@ type RemoteRouteOrder = {
   total: number | string;
   warehouse_status: string | null;
   sticker_code: string | null;
-  stores: { name: string; address: string | null; contact_name: string | null; phone: string | null; latitude: number | null; longitude: number | null } | Array<{ name: string; address: string | null; contact_name: string | null; phone: string | null; latitude: number | null; longitude: number | null }> | null;
+  customers: { name: string; address: string | null; contact_name: string | null; phone: string | null; latitude: number | null; longitude: number | null } | Array<{ name: string; address: string | null; contact_name: string | null; phone: string | null; latitude: number | null; longitude: number | null }> | null;
   order_items?: Array<{ quantity: number; unit_price: number | string; products: { name: string } | Array<{ name: string }> | null }>;
 };
 
@@ -74,7 +74,7 @@ function demoRouteOrder(code: string): RouteOrder | undefined {
 }
 
 function routeOrderFromRemote(row: RemoteRouteOrder, fallbackCode: string): RouteOrder {
-  const store = Array.isArray(row.stores) ? row.stores[0] : row.stores;
+  const store = Array.isArray(row.customers) ? row.customers[0] : row.customers;
   const demoStop = stops.find((stop) => stop.name === store?.name);
   const hasCoordinates = Number.isFinite(store?.latitude) && Number.isFinite(store?.longitude);
   return {
@@ -127,9 +127,17 @@ export default function DispatcherApp() {
   const routeHydrationAttempted = useRef(new Set<string>());
   useEffect(() => {
     if (!supabase) return;
+    const client = supabase;
     let active = true;
-    supabase.auth.getSession().then(({ data }) => { if (active && data.session) setLogged(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { if (active && session) setLogged(true); });
+    const authorize = async (userId?: string) => {
+      if (!userId) { if (active) setLogged(false); return; }
+      const { data: membership } = await client.from("company_users").select("company_id").eq("user_id", userId).eq("role", "forwarder").eq("status", "active").limit(1).maybeSingle();
+      if (!active) return;
+      if (membership) localStorage.setItem("alsat-company-id", membership.company_id);
+      setLogged(Boolean(membership));
+    };
+    client.auth.getSession().then(({ data }) => { void authorize(data.session?.user.id); });
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => { void authorize(session?.user.id); });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
   useEffect(() => {
@@ -171,7 +179,7 @@ export default function DispatcherApp() {
     let active = true;
     supabase
       .from("orders")
-      .select("id,company_id,total,warehouse_status,sticker_code,stores(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))")
+      .select("id,company_id,total,warehouse_status,sticker_code,customers(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))")
       .in("sticker_code", missingCodes)
       .then(({ data, error }) => {
         if (!active || error || !data) return;
@@ -192,7 +200,7 @@ export default function DispatcherApp() {
     const code = parsed.stickerCode;
 
     if (supabase) {
-      let query = supabase.from("orders").select("id,company_id,total,warehouse_status,sticker_code,stores(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))").eq("sticker_code", code);
+      let query = supabase.from("orders").select("id,company_id,total,warehouse_status,sticker_code,customers(name,address,contact_name,phone,latitude,longitude),order_items(quantity,unit_price,products(name))").eq("sticker_code", code);
       if (parsed.orderId) query = query.eq("id", parsed.orderId);
       const { data: remoteOrder, error: findError } = await query.limit(1).maybeSingle();
       if (findError) return { ok: false, message: `Тапсырысты тексеру мүмкін болмады: ${findError.message}` };
@@ -246,7 +254,7 @@ export default function DispatcherApp() {
 
     return { ok: false, message: "Бұл QR бойынша дайын тапсырыс табылмады." };
   };
-  if (!logged) return <DispatcherLoginAlsat onLogin={() => setLogged(true)} />;
+  if (!logged) return <DispatcherLoginAlsat onLogin={() => { window.location.href = "/workspace-login"; }} />;
   const go = (next: Screen) => setScreen(next);
   const acceptedRouteOrders = acceptedOrders
     .map((code) => routeOrders.find((order) => order.code === code) ?? demoRouteOrder(code))
@@ -455,7 +463,7 @@ function QrCameraScanner({ busy, onScan }: { busy: boolean; onScan: (value: stri
     }
     try {
       const reader = new BrowserQRCodeReader();
-      const controls = await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } }, audio: false }, videoRef.current!, (result) => {
+      const controls = await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } }, audio: false }, videoRef.current!, (result: { getText(): string } | undefined) => {
         if (!result) return;
         const value = result.getText();
         controlsRef.current?.stop();
@@ -491,3 +499,4 @@ function Fuel({ go }: { go: (screen: Screen) => void }) { const [tab,setTab]=use
 function Documents({ go }: { go: (screen: Screen) => void }) { const [selected,setSelected]=useState("");const [added,setAdded]=useState(false);const items=["Жолсапарлар · 12 құжат","Транспорт актілері · 8 құжат","Қолма-қолсыз түсім · PDF · 2.4 MB","Көлік куәлігі · PDF · 1.1 MB","Техникалық байқау · PDF · 1.6 MB"];return <section className="role-screen"><div className="role-heading"><button className="back" onClick={()=>go("more")}>‹</button><h1>Құжаттар</h1><span/></div>{added&&<div className="action-panel success">✓ Жаңа құжат тіркелді</div>}{items.map((item,index)=><button className="setting-row role-setting" onClick={()=>setSelected(item)} key={item}><span className={index>1?"doc-icon red":"doc-icon"}>▣</span>{item}<b>›</b></button>)}{selected&&<div className="action-panel"><strong>{selected}</strong><p>Құжатты көру немесе басып шығару.</p><button onClick={()=>window.print()}>Басып шығару</button></div>}<button className="role-primary" onClick={()=>setAdded(true)}>Құжат қосу</button></section> }
 function Support({ go }: { go: (screen: Screen) => void }) { const [draft,setDraft]=useState("");const [messages,setMessages]=useState(["№100045 тапсырысы бойынша сұрақ бар"]);const send=()=>{if(!draft.trim())return;setMessages([...messages,draft.trim()]);setDraft("")};return <section className="role-screen support-screen"><div className="role-heading"><button className="back" onClick={()=>go("more")}>‹</button><h1>Қолдау қызметі</h1><button onClick={()=>go("documents")}>•••</button></div><div className="support-status">●　Онлайн</div><div className="chat-bubble incoming">Сәлеметсіз бе! Қалай көмектесе аламыз?</div>{messages.map((message,index)=><div className="chat-bubble outgoing" key={`${message}-${index}`}>{message}</div>)}<div className="chat-bubble incoming">Сұрағыңызды қабылдадық, жақында жауап береміз.</div><div className="support-input"><input value={draft} onChange={(event)=>setDraft(event.target.value)} onKeyDown={(event)=>event.key==="Enter"&&send()} placeholder="Хабарлама енгізіңіз..."/><button onClick={send}>➤</button></div></section> }
 function DispatcherMore({ go }: { go: (screen: Screen) => void }) { return <section className="role-screen"><h1>Көлік және баптаулар</h1><button className="setting-row role-setting" onClick={() => go("vehicle")}>▣　Көлік туралы ақпарат <b>›</b></button><button className="setting-row role-setting" onClick={() => go("fuel")}>♨　Жанармай және шығындар <b>›</b></button><button className="setting-row role-setting" onClick={() => go("documents")}>▤　Құжаттар <b>›</b></button><button className="setting-row role-setting" onClick={() => go("reports")}>▥　Есептер <b>›</b></button><button className="setting-row role-setting" onClick={() => go("support")}>♧　Қолдау қызметі <b>›</b></button></section> }
+

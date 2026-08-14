@@ -8,7 +8,7 @@ import { supabase } from "../../lib/supabase";
 import { flushOrderQueue } from "../../lib/order-sync";
 
 type Screen = "dashboard" | "clients" | "new-store" | "client" | "catalog" | "order" | "orders" | "detail" | "route" | "visit" | "reports" | "profile" | "notifications" | "more";
-type Product = { id: number; name: string; subtitle: string; price: number; stock: number };
+type Product = { id: number | string; name: string; subtitle: string; price: number; stock: number };
 type OrderRecord = { id: string; client: string; total: number; status: string; createdAt: string; items: Product[] };
 type AgentStore = { name: string; address: string; contact: string; phone: string; latitude?: number; longitude?: number };
 type SyncState = "idle" | "syncing" | "synced" | "offline";
@@ -30,8 +30,11 @@ const initialOrders: OrderRecord[] = [
 ];
 
 export default function AgentApp() {
+  const [accessChecked, setAccessChecked] = useState(!supabase);
+  const [agentProfileId, setAgentProfileId] = useState<string | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
   const [screen, setScreen] = useState<Screen>("dashboard");
-  const [cart, setCart] = useState<Product[]>([products[0], products[2], products[3]]);
+  const [cart, setCart] = useState<Product[]>([]);
   const [selectedClient, setSelectedClient] = useState("Строймаг");
   const [storeNames, setStoreNames] = useState<string[]>(clients);
   const [storeDetails, setStoreDetails] = useState<AgentStore[]>([]);
@@ -40,6 +43,39 @@ export default function AgentApp() {
   const [lastOrder, setLastOrder] = useState<OrderRecord | null>(null);
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const total = useMemo(() => cart.reduce((sum, item) => sum + item.price, 0), [cart]);
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    void (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) { window.location.replace("/agent-login"); return; }
+      const { data: profile } = await supabase.from("sales_agents").select("id").eq("user_id", userData.user.id).maybeSingle();
+      if (!profile) { window.location.replace("/agent/setup"); return; }
+      const { data: approved } = await supabase.from("company_sales_agents").select("company_id").eq("sales_agent_id", profile.id).eq("status", "approved");
+      const currentCompany = localStorage.getItem("alsat-company-id");
+      const membership = (approved ?? []).find((item) => item.company_id === currentCompany) ?? approved?.[0];
+      if (!membership) { window.location.replace("/agent/setup"); return; }
+      localStorage.setItem("alsat-company-id", membership.company_id);
+      const { data: remoteProducts } = await supabase.from("products")
+        .select("id,name,sku,sale_price,price,stock")
+        .eq("company_id", membership.company_id)
+        .eq("workspace_active", true)
+        .eq("sales_agent_visible", true)
+        .order("created_at", { ascending: false });
+      if (active) {
+        setAgentProfileId(profile.id);
+        if (remoteProducts) setCatalogProducts(remoteProducts.map((product) => ({
+          id: product.id,
+          name: product.name,
+          subtitle: product.sku || "",
+          price: Number(product.sale_price || product.price || 0),
+          stock: Number(product.stock || 0),
+        })));
+        setAccessChecked(true);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     const saved = localStorage.getItem("alsat-agent-orders");
     if (saved) {
@@ -57,7 +93,7 @@ export default function AgentApp() {
     }
     const companyId = localStorage.getItem("alsat-company-id");
     if (supabase && companyId) {
-      void supabase.from("stores").select("name,address,contact_name,phone,latitude,longitude").eq("company_id", companyId).then(({ data }) => {
+      void supabase.from("customers").select("name,address,contact_name,phone,latitude,longitude").eq("company_id", companyId).then(({ data }) => {
         if (!data?.length) return;
         const remoteStores: AgentStore[] = data.map((store) => ({ name: store.name, address: store.address || "", contact: store.contact_name || "", phone: store.phone || "", latitude: store.latitude ?? undefined, longitude: store.longitude ?? undefined }));
         setStoreDetails((current) => [...remoteStores, ...current.filter((local) => !remoteStores.some((remote) => remote.name.toLowerCase() === local.name.toLowerCase()))]);
@@ -79,7 +115,7 @@ export default function AgentApp() {
   }, []);
   const go = (next: Screen) => setScreen(next);
   const add = (product: Product) => setCart((current) => [...current, product]);
-  const remove = (id: number) => setCart((current) => { const index = current.findIndex((item) => item.id === id); return index < 0 ? current : [...current.slice(0, index), ...current.slice(index + 1)]; });
+  const remove = (id: number | string) => setCart((current) => { const index = current.findIndex((item) => item.id === id); return index < 0 ? current : [...current.slice(0, index), ...current.slice(index + 1)]; });
   const addStore = async (store: AgentStore) => {
     const next = [store.name, ...storeNames.filter((name) => name.toLowerCase() !== store.name.toLowerCase())];
     const nextDetails = [store, ...storeDetails.filter((item) => item.name.toLowerCase() !== store.name.toLowerCase())];
@@ -89,7 +125,7 @@ export default function AgentApp() {
     localStorage.setItem("alsat-agent-store-details", JSON.stringify(nextDetails));
     const companyId = localStorage.getItem("alsat-company-id");
     if (supabase && companyId) {
-      await supabase.from("stores").insert({ company_id: companyId, name: store.name, address: store.address, contact_name: store.contact, phone: store.phone, latitude: store.latitude, longitude: store.longitude });
+      await supabase.from("customers").insert({ company_id: companyId, created_by_agent_id: agentProfileId, name: store.name, address: store.address, contact_name: store.contact, phone: store.phone, latitude: store.latitude, longitude: store.longitude });
     }
     setSelectedClient(store.name);
     go("client");
@@ -104,7 +140,7 @@ export default function AgentApp() {
     localStorage.setItem("alsat-agent-stores", JSON.stringify(nextNames));
     const companyId = localStorage.getItem("alsat-company-id");
     if (supabase && companyId) {
-      await supabase.from("stores").update({ name: store.name, address: store.address, contact_name: store.contact, phone: store.phone, latitude: store.latitude, longitude: store.longitude }).eq("company_id", companyId).eq("name", selectedClient);
+      await supabase.from("customers").update({ name: store.name, address: store.address, contact_name: store.contact, phone: store.phone, latitude: store.latitude, longitude: store.longitude }).eq("company_id", companyId).eq("name", selectedClient);
     }
   };
   const saveOrder = () => {
@@ -123,14 +159,16 @@ export default function AgentApp() {
     go("detail");
   };
 
+  if (!accessChecked) return <main className="qmart-suite"><section className="suite-screen"><div className="empty">Қолжетімділік тексерілуде…</div></section></main>;
+
   return <main className="qmart-suite">
     <header className="suite-header"><button className="icon-button" onClick={() => go("more")}>☰</button><div className="suite-brand"><b>ALSAT</b><small>САУДА ӨКІЛІ</small></div><button className="icon-button" onClick={() => go("notifications")} aria-label="Хабарламалар">♧</button></header>
     {screen === "dashboard" && <Dashboard go={go} syncState={syncState} />}
     {screen === "clients" && <Clients clients={storeNames} go={go} onAdd={() => go("new-store")} onSelect={(name) => { setSelectedClient(name); go("client"); }} />}
     {screen === "new-store" && <NewStoreForm onCancel={() => go("clients")} onSave={addStore} />}
     {screen === "client" && <ClientCard name={selectedClient} store={storeDetails.find((store) => store.name.toLowerCase() === selectedClient.toLowerCase())} orders={orders} go={go} onUpdate={updateStore} />}
-    {screen === "catalog" && <Catalog products={products} cart={cart} add={add} go={go} />}
-    {screen === "order" && <OrderForm products={products} cart={cart} total={total} client={selectedClient} add={add} remove={remove} go={go} onSave={saveOrder} />}
+    {screen === "catalog" && <Catalog products={catalogProducts} cart={cart} add={add} go={go} />}
+    {screen === "order" && <OrderForm products={catalogProducts} cart={cart} total={total} client={selectedClient} add={add} remove={remove} go={go} onSave={saveOrder} />}
     {screen === "orders" && <Orders orders={orders} go={go} onSelect={(order) => { setSelectedClient(order.client); setOrderSaved(order.status !== "Жаңа"); setLastOrder(order); setCart(order.items); go("detail"); }} />}
     {screen === "detail" && <OrderDetail order={lastOrder} total={total} client={selectedClient} saved={orderSaved} go={go} />}
     {screen === "route" && <RouteScreen go={go} onClient={(name) => { setSelectedClient(name); go("visit"); }} />}
@@ -245,7 +283,7 @@ function Catalog({ products, cart, add, go }: { products: Product[]; cart: Produ
   });
   return <section className="suite-screen"><div className="screen-heading"><div><button className="back-link" onClick={() => go("dashboard")}>‹ Басты бет</button><h1>Тауарлар</h1></div><button className="cart-button" onClick={() => go("order")}>🛒<i>{cart.length}</i></button></div><input className="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="⌕  Тауар іздеу"/><div className="filters"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Барлығы</button><button className={filter === "lamp" ? "active" : ""} onClick={() => setFilter("lamp")}>Шамдар</button><button className={filter === "projector" ? "active" : ""} onClick={() => setFilter("projector")}>Проекторлар</button><button className={filter === "panel" ? "active" : ""} onClick={() => setFilter("panel")}>Панельдер</button></div>{filtered.length ? filtered.map(product => <div className="product-row" key={product.id}><span className="product-icon">◌</span><div><strong>{product.name}</strong><small>{product.subtitle}</small><b>{money(product.price)}</b><em>Қоймада: {product.stock} дана</em></div><button onClick={() => add(product)}>+</button></div>) : <div className="empty">Тауар табылмады</div>}</section>
 }
-function OrderForm({ cart, total, client, add, remove, go, onSave }: { products: Product[]; cart: Product[]; total: number; client: string; add: (product: Product) => void; remove: (id: number) => void; go: (screen: Screen) => void; onSave: () => void }) { const grouped = cart.reduce<Array<{ product: Product; quantity: number }>>((result, product) => { const found = result.find((row) => row.product.id === product.id); if (found) found.quantity += 1; else result.push({ product, quantity: 1 }); return result; }, []); return <section className="suite-screen"><button className="back-link" onClick={() => go("catalog")}>‹ Тауарлар</button><div className="screen-heading"><h1>Тапсырыс жасау</h1><span>{cart.length} дана</span></div><button className="selected-client" onClick={() => go("clients")}><div><strong>{client}</strong><small>Борышы: 120 000 ₸</small></div><b>›</b></button><button className="search search-button" onClick={() => go("catalog")}>⌕  Тағы тауар қосу</button>{grouped.map(({ product, quantity }) => <div className="cart-row" key={product.id}><span className="product-icon">◌</span><div><strong>{product.name}</strong><small>{product.subtitle}</small></div><div className="quantity"><button onClick={() => remove(product.id)}>−</button><b>{quantity}</b><button onClick={() => add(product)}>+</button><strong>{money(product.price * quantity)}</strong></div></div>)}<div className="order-summary"><InfoRow label={`Тауарлар (${cart.length})`} value={money(total)}/><InfoRow label="Жеңілдік (5%)" value={`- ${money(Math.round(total * .05))}`}/><InfoRow label="Жалпы сома" value={money(Math.round(total * .95))}/></div><button className="save-order" onClick={cart.length ? onSave : () => go("catalog")}>{cart.length ? "Тапсырысты сақтау" : "Тауар таңдау"}</button></section> }
+function OrderForm({ cart, total, client, add, remove, go, onSave }: { products: Product[]; cart: Product[]; total: number; client: string; add: (product: Product) => void; remove: (id: number | string) => void; go: (screen: Screen) => void; onSave: () => void }) { const grouped = cart.reduce<Array<{ product: Product; quantity: number }>>((result, product) => { const found = result.find((row) => row.product.id === product.id); if (found) found.quantity += 1; else result.push({ product, quantity: 1 }); return result; }, []); return <section className="suite-screen"><button className="back-link" onClick={() => go("catalog")}>‹ Тауарлар</button><div className="screen-heading"><h1>Тапсырыс жасау</h1><span>{cart.length} дана</span></div><button className="selected-client" onClick={() => go("clients")}><div><strong>{client}</strong><small>Борышы: 120 000 ₸</small></div><b>›</b></button><button className="search search-button" onClick={() => go("catalog")}>⌕  Тағы тауар қосу</button>{grouped.map(({ product, quantity }) => <div className="cart-row" key={product.id}><span className="product-icon">◌</span><div><strong>{product.name}</strong><small>{product.subtitle}</small></div><div className="quantity"><button onClick={() => remove(product.id)}>−</button><b>{quantity}</b><button onClick={() => add(product)}>+</button><strong>{money(product.price * quantity)}</strong></div></div>)}<div className="order-summary"><InfoRow label={`Тауарлар (${cart.length})`} value={money(total)}/><InfoRow label="Жеңілдік (5%)" value={`- ${money(Math.round(total * .05))}`}/><InfoRow label="Жалпы сома" value={money(Math.round(total * .95))}/></div><button className="save-order" onClick={cart.length ? onSave : () => go("catalog")}>{cart.length ? "Тапсырысты сақтау" : "Тауар таңдау"}</button></section> }
 function Orders({ orders, go, onSelect }: { orders: OrderRecord[]; go: (screen: Screen) => void; onSelect: (order: OrderRecord) => void }) {
   const [filter, setFilter] = useState("all");
   const filtered = filter === "all" ? orders : orders.filter((order) => order.status === filter);

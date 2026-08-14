@@ -29,3 +29,32 @@
 .price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.form-card-hint{color:#81918a;font-size:10px;line-height:1.45;margin:-3px 0 13px}.product-media-card{display:grid;grid-template-columns:190px 1fr;column-gap:22px;align-items:start}.product-media-card h3,.product-media-card p{grid-column:1/-1}.product-image-upload{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:170px;border:1px dashed #aac9b1;border-radius:12px;background:#f7fbf8;color:#159345;text-align:center;overflow:hidden;cursor:pointer}.product-image-upload>span{font-size:33px}.product-image-upload strong{font-size:11px;margin-top:6px}.product-image-upload small{color:#84958c;font-size:9px;margin-top:4px}.product-image-upload input{position:absolute;inset:0;opacity:0;cursor:pointer}.product-image-upload img{width:100%;height:170px;object-fit:cover}.product-media-card:has(.product-image-upload img){grid-template-columns:190px 1fr}@media(max-width:720px){.price-grid{grid-template-columns:1fr 1fr}.product-media-card{display:block}.product-media-card .product-image-upload{margin-top:10px}}@media(max-width:480px){.price-grid{grid-template-columns:1fr}}
 .product-form-status{border:1px solid #9bd3a8;border-radius:9px;background:#effaf1;color:#178a44;padding:11px 13px;font-size:10px;line-height:1.4}.product-form-status.error{border-color:#efbcb7;background:#fff1ef;color:#b54740}.enhanced-product-row{grid-template-columns:2fr 1.2fr .7fr 1.5fr}.product-price-stack b,.product-price-stack small{display:block}.product-price-stack b{font-size:11px}.product-price-stack small{color:#84958c;font-size:8px;margin-top:3px}.enhanced-product-row .product-thumb{overflow:hidden}.enhanced-product-row .product-thumb img{width:100%;height:100%;object-fit:cover}.edit-product-button{border:1px solid #c9e0ff;background:#edf5ff;color:#176fd1;border-radius:6px;padding:6px 8px;font:inherit;font-size:8px;font-weight:800;cursor:pointer}.enhanced-product-row .visibility{display:flex;flex-wrap:wrap;gap:5px;align-items:center}@media(max-width:820px){.enhanced-product-row{grid-template-columns:1fr}.enhanced-product-row .visibility{justify-content:flex-start}.product-price-stack{margin:5px 0}}
 .delete-product-button{border:1px solid #f1c4c4;background:#fff3f3;color:#c44747;border-radius:6px;padding:6px 8px;font:inherit;font-size:8px;font-weight:800;cursor:pointer}.delete-product-button:hover{background:#ffe4e4;border-color:#e9aaaa}
+
+/* Architecture v1 keeps the established Qmart/Alsat visual language: calm white surfaces, dark green navigation and one clear green action color. */
+.workspace-owner-login{background:linear-gradient(160deg,#063c30,#03201f)}
+.workspace-owner-login .qmart-login-brand .qmark{color:#45bd5a}
+.workspace-owner-login .qmart-login-brand small,.workspace-owner-login .forgot{color:#7be18a}
+.workspace-owner-login .qmart-login-copy p,.workspace-owner-login label,.workspace-owner-login .demo-login{color:#b9d6cc}
+.workspace-owner-login input{background:#07352e;border-color:#34735f}
+.workspace-owner-login .qmart-login-btn{background:#20ac4d}
+.workspace-owner-login .offline-note{color:#79a995}
+.sidebar{background:#082c28;color:#b7cec5}
+.brand span{background:#159143}
+.brand em,.sidebar-foot small{color:#84a49a}
+.nav{color:#b7cec5}
+.nav.active,.nav:hover{background:#125043;color:#fff}
+.sidebar-foot{border-top-color:#245248}
+.workspace-logout{border-color:#35645a;background:#0e3c35;color:#d7e9e2}
+.workspace-logout:hover{background:#155146;border-color:#4a756b}
+.primary{background:#159143;box-shadow:0 6px 13px #15914332}
+.stat-icon,.link,.back{color:#159143}
+.stat-icon,.order-icon,.product-thumb{background:#e8f6ec;color:#159143}
+.launch{background:linear-gradient(145deg,#159346,#078037)}
+.launch .eyebrow{color:#bde9c8}.launch p:not(.eyebrow){color:#dcf2e2}.white-button{color:#118641}
+.toggle.yes{background:#edf8f0;color:#159143;border-color:#d4ecd9}.toggle.yes i{background:#159143}
+input{outline-color:#159143}
+.channel input{accent-color:#159143}
+.phone{background:#092c28;border-color:#17483f}.phone b{color:#64ce78}.phone button{color:#159143}
+.new-store-mark{background:#e8f6ec;color:#159143}.store-form-intro{background:#e8f6ec;color:#476e5a}
+.location-picker-head button{border-color:#cfe8d6;background:#f0faf3;color:#159143}
+.mobile-nav button.active{color:#159143!important}

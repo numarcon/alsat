@@ -41,18 +41,26 @@ export async function syncOrderPayload(order: SyncableOrder) {
   if (!supabase) return { synced: false, reason: "supabase-unconfigured" };
   const companyId = typeof window !== "undefined" ? localStorage.getItem("alsat-company-id") : null;
   if (!isUuid(companyId)) return { synced: false, reason: "company-missing" };
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { synced: false, reason: "authentication-required" };
+  const { data: agent } = await supabase.from("sales_agents").select("id").eq("user_id", userData.user.id).maybeSingle();
+  if (!agent?.id) return { synced: false, reason: "sales-agent-profile-missing" };
 
   const createdAt = order.createdAt ? new Date(order.createdAt) : null;
   const createdAtValue = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.toISOString() : undefined;
-  let storeId: string | undefined;
+  let customerId: string | undefined;
   if (order.client?.trim()) {
-    const { data: store } = await supabase.from("stores").select("id").eq("company_id", companyId).eq("name", order.client.trim()).limit(1).maybeSingle();
-    if (store?.id) storeId = store.id;
+    const { data: customer } = await supabase.from("customers").select("id").eq("company_id", companyId).eq("name", order.client.trim()).limit(1).maybeSingle();
+    if (customer?.id) customerId = customer.id;
   }
+
+  if (!customerId) return { synced: false, reason: "customer-required" };
 
   const { data: remoteOrder, error: orderError } = await supabase.from("orders").insert({
     company_id: companyId,
-    ...(storeId ? { store_id: storeId } : {}),
+    customer_id: customerId,
+    sales_agent_id: agent.id,
+    source: "agent",
     status: order.status === "Жаңа" ? "draft" : "submitted",
     warehouse_status: "new",
     total: Number(order.total || 0),
@@ -62,6 +70,7 @@ export async function syncOrderPayload(order: SyncableOrder) {
   rememberRemoteOrder(order.id, remoteOrder.id);
 
   const items = (order.items || []).map((item) => ({
+    company_id: companyId,
     order_id: remoteOrder.id,
     product_id: isUuid(item.id) ? item.id : null,
     quantity: 1,

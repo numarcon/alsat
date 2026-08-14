@@ -12,7 +12,7 @@ type Order = { id: string; company_id: string; status: string; warehouse_status:
 type Product = { id: string; company_id: string; stock: number };
 
 const money = new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 });
-const roleNames: Record<string, string> = { owner: "Компания иесі", sales_agent: "Сауда өкілі", warehouse: "Қойма", dispatcher: "Экспедитор" };
+const roleNames: Record<string, string> = { owner: "Компания иесі", admin: "Әкімші", manager: "Менеджер", warehouse: "Қойма", forwarder: "Экспедитор" };
 const navigation: { id: AdminScreen; icon: string; label: string }[] = [
   { id: "overview", icon: "▦", label: "Жалпы шолу" },
   { id: "companies", icon: "◇", label: "Компаниялар" },
@@ -64,7 +64,7 @@ export default function AdminPage() {
     setAdminName(admin.full_name || userData.user.email || "Alsat Admin");
     const [companyResult, memberResult, orderResult, productResult] = await Promise.all([
       supabase.from("companies").select("id,name,bin,city,phone,created_at").order("created_at", { ascending: false }),
-      supabase.from("company_members").select("company_id,user_id,role,full_name,status"),
+      supabase.from("company_users").select("company_id,user_id,role,status"),
       supabase.from("orders").select("id,company_id,status,warehouse_status,total,created_at").order("created_at", { ascending: false }).limit(250),
       supabase.from("products").select("id,company_id,stock"),
     ]);

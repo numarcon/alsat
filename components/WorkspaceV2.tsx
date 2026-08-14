@@ -116,7 +116,7 @@ export default function WorkspaceV2() {
       const isLocalPreview = window.location.hostname === "localhost"
         && new URLSearchParams(window.location.search).get("ui") === "preview";
       if (isLocalPreview) {
-        setCompanyId("local-preview");
+        setCompanyId("00000000-0000-0000-0000-000000000000");
         setCompanyName("Krausz Electric");
         setRole("owner");
         setProducts([

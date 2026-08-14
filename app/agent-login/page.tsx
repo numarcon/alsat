@@ -84,7 +84,7 @@ export default function AgentLogin() {
       return;
     }
 
-    window.location.href = "/agent";
+    window.location.href = "/agent/setup";
   }
 
   async function signInWithEmail(event: FormEvent<HTMLFormElement>) {
@@ -106,7 +106,7 @@ export default function AgentLogin() {
       setError(signInError.message || "Email немесе құпия сөз қате.");
       return;
     }
-    window.location.href = "/agent";
+    window.location.href = "/agent/setup";
   }
 
   async function signInWithGoogle() {
@@ -120,7 +120,7 @@ export default function AgentLogin() {
     setLoading(true);
     const { error: googleError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/agent` },
+      options: { redirectTo: `${window.location.origin}/agent/setup` },
     });
     setLoading(false);
 
@@ -195,7 +195,7 @@ export default function AgentLogin() {
       <button className="google-login" type="button" onClick={signInWithGoogle} disabled={loading}>
         G　Google арқылы кіру
       </button>
-      <Link className="demo-login" href="/agent">Демо кабинетке кіру</Link>
+      <Link className="demo-login" href="/agent/setup">Сауда өкілі профилін ашу</Link>
       <a className="forgot" href="mailto:support@alsat.kz">Құпия сөзді ұмыттыңыз ба?</a>
       <small className="offline-note">◉　Offline режимі қолжетімді</small>
     </main>

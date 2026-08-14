@@ -116,8 +116,9 @@ export default function MarketplacePage() {
       } else if (result.error) {
         setNotice("Marketplace каталогына migration қосылған соң нақты тауарлар көрінеді. Қазір демо каталог ашылды.");
       } else {
-        setProducts([]);
-        setUsingDemo(false);
+        setProducts(demoProducts);
+        setUsingDemo(true);
+        setNotice("Marketplace-те жарияланған нақты тауар әзірге жоқ. Қазір демо каталог көрсетіліп тұр.");
       }
       setLoading(false);
     }

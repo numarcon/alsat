@@ -9,8 +9,8 @@ type Product = { id: string; name: string; price: number };
 type Order = { id: string; customer_id: string | null; warehouse_id: string | null; forwarder_id: string | null; status: string; payment_status: string; total: number; source: string };
 
 const money = { format: (value: number) => `${Math.round(Number(value) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ")} ₸` };
-const statuses = ["draft", "submitted", "confirmed", "picking", "out_for_delivery", "delivered", "cancelled"];
-const statusLabels: Record<string, string> = { draft: "Жоба", submitted: "Жіберілді", confirmed: "Бекітілді", picking: "Жиналуда", out_for_delivery: "Жеткізілуде", delivered: "Жеткізілді", cancelled: "Бас тартылды" };
+const statuses = ["new", "draft", "submitted", "confirmed", "picking", "out_for_delivery", "delivered", "cancelled"];
+const statusLabels: Record<string, string> = { new: "Жаңа", draft: "Жоба", submitted: "Жіберілді", confirmed: "Бекітілді", picking: "Жиналуда", out_for_delivery: "Жеткізілуде", delivered: "Жеткізілді", cancelled: "Бас тартылды" };
 
 export default function CompanyOrders({ companyId }: { companyId: string | null }) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -126,7 +126,7 @@ export default function CompanyOrders({ companyId }: { companyId: string | null 
       <header><div><h2>Соңғы тапсырыстар</h2><p>Күй, төлем және жеткізу жауаптыларын бір жерден басқарыңыз.</p></div><span>{orders.length} жазба</span></header>
       {orders.length > 0 && <div className="ws2-order-table-head"><span>Тапсырыс</span><span>Сома</span><span>Күйі және төлем</span><span>Логистика</span></div>}
       {orders.map((order) => <article className="ws2-order-row" key={order.id}>
-        <div className="ws2-order-identity"><span>▤</span><div><strong>№{order.id.slice(0, 8).toUpperCase()}</strong><small>{customers.find((item) => item.id === order.customer_id)?.name || "Клиент"}</small><em>{order.source === "agent" ? "Сауда өкілі" : "Workspace"}</em></div></div>
+        <div className="ws2-order-identity"><span>▤</span><div><strong>№{order.id.slice(0, 8).toUpperCase()}</strong><small>{customers.find((item) => item.id === order.customer_id)?.name || "Клиент"}</small><em>{order.source === "agent" ? "Сауда өкілі" : order.source === "marketplace" ? "Marketplace" : "Workspace"}</em></div></div>
         <div className="ws2-order-sum"><strong>{money.format(order.total)}</strong><small>Жалпы сома</small></div>
         <div className="ws2-order-selects"><label>Күйі<select value={order.status} onChange={(event) => patchOrder(order.id, { status: event.target.value })}>{statuses.map((status) => <option value={status} key={status}>{statusLabels[status]}</option>)}</select></label><label>Төлем<select value={order.payment_status} onChange={(event) => patchOrder(order.id, { payment_status: event.target.value })}><option value="unpaid">Төленбеген</option><option value="partial">Жартылай</option><option value="paid">Төленді</option><option value="refunded">Қайтарылды</option></select></label></div>
         <div className="ws2-order-logistics"><div><label>Қойма<select value={order.warehouse_id || ""} onChange={(event) => patchOrder(order.id, { warehouse_id: event.target.value || null })}><option value="">Қойма жоқ</option>{warehouses.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label>Экспедитор<select value={order.forwarder_id || ""} onChange={(event) => patchOrder(order.id, { forwarder_id: event.target.value || null })}><option value="">Экспедитор жоқ</option>{forwarders.map((item) => <option value={item.id} key={item.id}>{item.full_name}</option>)}</select></label></div><button className="primary" disabled={busy} onClick={() => void saveOrder(order)}>Сақтау</button></div>

@@ -18,3 +18,27 @@
   .mobile-hero-actions{position:static;z-index:3;display:grid;width:100%;gap:8px}
   .hero-visual{margin:4px 0 10px}
 }
+
+.marketplace-checkout{width:min(720px,100%)}
+.checkout-section-title{display:flex;align-items:center;gap:10px;margin:21px 0 5px;padding-top:17px;border-top:1px solid #e0e8e3}
+.checkout-section-title:first-of-type{margin-top:12px;padding-top:0;border-top:0}
+.checkout-section-title>b{display:grid;place-items:center;width:28px;height:28px;flex:0 0 28px;border-radius:50%;background:#e3f5e9;color:var(--green);font-size:10px}
+.checkout-section-title strong,.checkout-section-title span{display:block}
+.checkout-section-title strong{color:#243d31;font-size:11px}
+.checkout-section-title span{margin-top:3px;color:#829087;font-size:8px}
+.checkout-payment-options{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}
+.checkout-payment-options button{display:flex;align-items:center;gap:9px;min-height:62px;border:1px solid #dce6e0;border-radius:8px;background:#fff;color:#30483c;padding:10px;text-align:left;cursor:pointer}
+.checkout-payment-options button.active{border-color:var(--green);background:#ecf8f0;box-shadow:0 0 0 1px var(--green)}
+.checkout-payment-options button:disabled{opacity:.5;cursor:not-allowed}
+.checkout-payment-options button>b{display:grid;place-items:center;width:29px;height:29px;flex:0 0 29px;border-radius:7px;background:#e7f4eb;color:var(--green)}
+.checkout-payment-options span,.checkout-payment-options small{display:block}
+.checkout-payment-options span{font-size:9px;font-weight:700}
+.checkout-payment-options small{margin-top:4px;color:#87938d;font-size:7px;font-weight:400}
+.checkout-consent{display:flex!important;align-items:flex-start;gap:8px;line-height:1.45}
+.checkout-consent input{width:auto!important;margin:2px 0 0!important;flex:0 0 auto}
+.checkout-consent span{font-size:8px}.checkout-consent a{color:var(--green)}
+.header-icon{display:grid;place-items:center;text-decoration:none}
+.catalog-menu-button{text-decoration:none}.section-link-button{display:inline-grid;place-items:center;border:1px solid #8ec4a4;border-radius:5px;background:#fff;color:#22663e;padding:10px 15px;text-decoration:none;font-size:9px}
+.favorite-button.active{color:#d83047;background:#fff1f3}
+
+@media(max-width:700px){.marketplace-checkout{padding:17px}.checkout-payment-options{grid-template-columns:1fr}.checkout-two{grid-template-columns:1fr}}

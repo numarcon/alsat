@@ -45,42 +45,34 @@ export async function bootstrapOwnerCompany(userId: string, pending: PendingComp
     .maybeSingle();
 
   if (existing) {
-    await supabase.from("company_members").upsert({
+    await supabase.from("company_users").upsert({
       company_id: existing.id,
       user_id: userId,
       role: "owner",
-      full_name: pending.fullName,
       status: "active",
     });
     rememberCompany(existing.id, existing.name);
     return existing;
   }
 
-  const { data: company, error: companyError } = await supabase
-    .from("companies")
-    .insert({
-      owner_id: userId,
-      name: pending.company,
-      bin: pending.bin || null,
-      city: pending.city,
-      phone: pending.phone,
-    })
-    .select("id,name")
-    .single();
+  const slug = `${pending.company.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company"}-${crypto.randomUUID().slice(0, 8)}`;
+  const { data: companyId, error: companyError } = await supabase.rpc("create_company", {
+    name: pending.company,
+    slug,
+  });
 
-  if (companyError || !company) {
+  if (companyError || !companyId) {
     throw new Error(companyError?.message || "Компанияны сақтау мүмкін болмады.");
   }
 
-  const { error: memberError } = await supabase.from("company_members").upsert({
-    company_id: company.id,
-    user_id: userId,
-    role: "owner",
-    full_name: pending.fullName,
-    status: "active",
-  });
+  const { data: company, error: profileError } = await supabase
+    .from("companies")
+    .update({ bin: pending.bin || null, city: pending.city, phone: pending.phone })
+    .eq("id", companyId)
+    .select("id,name")
+    .single();
 
-  if (memberError) throw new Error(memberError.message);
+  if (profileError || !company) throw new Error(profileError?.message || "Компания профилін сақтау мүмкін болмады.");
   rememberCompany(company.id, company.name);
   return company;
 }

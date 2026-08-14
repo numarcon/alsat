@@ -257,7 +257,7 @@ export default function WorkspaceV2() {
       <WorkspaceLogo />
       <p className="ws2-sidebar-caption">Компания кабинеті</p>
       <nav className="ws2-nav">{nav.map((item) => <button key={item.id} className={screen === item.id || (screen === "product-form" && item.id === "products") ? "active" : ""} onClick={() => setScreen(item.id)}><WorkspaceIcon name={item.icon} /><span>{item.label}</span></button>)}</nav>
-      <div className="ws2-sidebar-links"><span>Операциялық модульдер</span><Link href="/marketplace">Marketplace ↗</Link><Link href="/warehouse">Қойма QR ↗</Link><Link href="/dispatcher">Экспедитор және маршрут ↗</Link><Link href="/admin">Alsat Admin ↗</Link></div>
+      <div className="ws2-sidebar-links"><span>Операциялық модульдер</span><Link href="/">Marketplace ↗</Link><Link href="/warehouse">Қойма QR ↗</Link><Link href="/dispatcher">Экспедитор және маршрут ↗</Link><Link href="/admin">Alsat Admin ↗</Link></div>
       <div className="ws2-sidebar-user"><span>{companyName[0] || "A"}</span><div><strong>{companyName}</strong><small>{roleLabel(role)}</small></div></div>
       <button className="ws2-logout" onClick={() => void logout()} disabled={loggingOut}><WorkspaceIcon name="logout" />{loggingOut ? "Шығып жатыр…" : "Шығу"}</button>
     </aside>
@@ -334,7 +334,7 @@ function WorkspaceCustomers({ companyId, onChanged }: { companyId: string; onCha
 
 function WorkspaceModules() {
   const modules: Array<{ href: string; icon: IconName; title: string; text: string; tone: string }> = [
-    { href: "/marketplace", icon: "market", title: "Alsat Marketplace", text: "Жарияланған тауарлар мен B2B тапсырыстар", tone: "green" },
+    { href: "/", icon: "market", title: "Alsat Marketplace", text: "Жарияланған тауарлар мен B2B тапсырыстар", tone: "green" },
     { href: "/warehouse", icon: "warehouse", title: "Қойма және QR", text: "Жинау, стикер, QR арқылы тапсыру", tone: "blue" },
     { href: "/dispatcher", icon: "truck", title: "Экспедитор", text: "Маршрут, жанармай, чат және жеткізу", tone: "amber" },
     { href: "/admin", icon: "shield", title: "Alsat Admin", text: "Платформа, компаниялар және жүйе күйі", tone: "dark" },

@@ -88,7 +88,7 @@ export default function WorkspaceLoginPage() {
       </form>
       {error && <p className="login-error">{error}</p>}
       <div className="qmart-or"><span>немесе</span></div>
-      <Link className="demo-login" href="/?start=registration">Жаңа компания тіркеу</Link>
+      <Link className="demo-login" href="/workspace-signup">Жаңа компания тіркеу</Link>
       <Link className="forgot" href="/admin">Alsat Admin панеліне кіру</Link>
       <small className="offline-note">◉ Деректер Supabase арқылы қорғалады</small>
     </main>

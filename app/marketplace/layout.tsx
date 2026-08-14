@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import MarketplacePage from "./marketplace/page";
 
 export const metadata: Metadata = {
   title: "Alsat Marketplace — бизнеске арналған көтерме сауда",
   description: "Бизнес иелері мен дүкендерге арналған көтерме B2B marketplace.",
 };
 
-export default MarketplacePage;
+export default function MarketplaceLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return children;
+}

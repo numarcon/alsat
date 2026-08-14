@@ -34,7 +34,7 @@ export default function PromoPage() {
         </nav>
         <div className="promo-header-actions">
           <Link className="promo-login" href="/workspace-login">Кіру</Link>
-          <Link className="promo-button promo-button-small" href="/?start=registration">Тегін бастау <Arrow /></Link>
+          <Link className="promo-button promo-button-small" href="/workspace-signup">Тегін бастау <Arrow /></Link>
         </div>
       </header>
 
@@ -46,7 +46,7 @@ export default function PromoPage() {
           <h1>Сату процесіңізді<br /><em>бір жүйеге</em> біріктіріңіз.</h1>
           <p>Alsat Workspace компания, сауда өкілі, қойма және жеткізуді бір цифрлық кеңістікте байланыстырады. Тапсырыстан жеткізуге дейінгі әр қадам бақылауда.</p>
           <div className="promo-hero-actions">
-            <Link className="promo-button" href="/?start=registration">Workspace ашу <Arrow /></Link>
+            <Link className="promo-button" href="/workspace-signup">Workspace ашу <Arrow /></Link>
             <a className="promo-button promo-button-ghost" href="#workflow"><span className="promo-play">▶</span> Қалай жұмыс істейді?</a>
           </div>
           <div className="promo-proof">
@@ -133,7 +133,7 @@ export default function PromoPage() {
       <section className="promo-final-cta">
         <div className="cta-grid" /><div className="cta-orb orb-one" /><div className="cta-orb orb-two" />
         <span className="promo-eyebrow light">АЛҒАШҚЫ ҚАДАМ</span><h2>Сатуды бүгіннен бастап<br />бір жүйеде басқарыңыз.</h2><p>Alsat Workspace-қа компанияңызды тіркеп, командаңызбен жұмыс процесін бастаңыз.</p>
-        <div><Link className="promo-button promo-button-white" href="/?start=registration">Тегін Workspace ашу <Arrow /></Link><Link className="promo-cta-login" href="/workspace-login">Аккаунтым бар — кіру</Link></div>
+        <div><Link className="promo-button promo-button-white" href="/workspace-signup">Тегін Workspace ашу <Arrow /></Link><Link className="promo-cta-login" href="/workspace-login">Аккаунтым бар — кіру</Link></div>
       </section>
 
       <footer className="promo-footer"><Link className="promo-brand" href="/promo"><span className="promo-brand-mark">A</span><span><b>ALSAT</b><small>WORKSPACE</small></span></Link><p>Қазақстан бизнесіне арналған сату және дистрибуция платформасы.</p><span>© 2026 Alsat Workspace</span></footer>

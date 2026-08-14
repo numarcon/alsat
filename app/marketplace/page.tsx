@@ -230,7 +230,7 @@ export default function MarketplacePage() {
       </article>)}</div>
     </section>
 
-    <footer className="marketplace-footer"><div><strong>ALSAT</strong><span>Бизнеске арналған электр тауарларының marketplace-і.</span></div><Link href="/workspace-login">Серіктес болу →</Link></footer>
+    <footer className="marketplace-footer"><div><strong>ALSAT</strong><span>Бизнеске арналған электр тауарларының marketplace-і.</span></div><Link href="/workspace-signup">Серіктес болу →</Link></footer>
     {notice && <div className="marketplace-toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
 
     {selected && <div className="marketplace-overlay" onClick={() => setSelected(null)}><section className="marketplace-modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setSelected(null)}>×</button><div className="modal-product-visual">{selected.imageUrl ? <img src={selected.imageUrl} alt=""/> : <span>▣</span>}</div><span className="product-category">{selected.category}</span><h2>{selected.name}</h2><p>{selected.description}</p><div className="modal-meta"><span>SKU <b>{selected.sku}</b></span><span>Қалдық <b>{selected.stock} дана</b></span><span>Минимум <b>{selected.minOrder} дана</b></span></div><strong className="modal-price">{money.format(selected.price)}</strong><button className="modal-primary" onClick={() => { addToCart(selected); setSelected(null); setCartOpen(true); }}>Себетке қосу →</button></section></div>}

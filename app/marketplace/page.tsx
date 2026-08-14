@@ -14,9 +14,14 @@ type CatalogProduct = {
   price: number;
   stock: number;
   category: string;
+  subcategory: string;
+  brand: string;
   description: string;
   imageUrl: string;
+  imageUrls: string[];
   minOrder: number;
+  unit: string;
+  bulletPoints: string[];
 };
 type CheckoutStore = { id: string; name: string; address: string; contactName: string; phone: string };
 
@@ -29,14 +34,13 @@ const money = {
     return `${sign}${digits} ₸`;
   },
 };
-const categories = ["Барлығы", "Шамдар", "Прожекторлар", "Панельдер", "Розеткалар", "Автоматика"];
 const demoProducts: CatalogProduct[] = [
-  { id: "demo-a60", name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", price: 650, stock: 1250, category: "Шамдар", description: "Күнделікті саудаға арналған үнемді LED шам.", imageUrl: "", minOrder: 1 },
-  { id: "demo-projector", name: "KRAUSZ Прожектор 100W 6500K IP65", sku: "KLZ-FL-100W-6500", price: 8500, stock: 320, category: "Прожекторлар", description: "Сыртқы және өндірістік жарықтандыруға арналған прожектор.", imageUrl: "", minOrder: 2 },
-  { id: "demo-panel", name: "KRAUSZ Панель LED 36W 595x595", sku: "KLZ-P-36W-595", price: 4200, stock: 760, category: "Панельдер", description: "Кеңсе мен сауда нүктелеріне арналған төбелік панель.", imageUrl: "", minOrder: 5 },
-  { id: "demo-socket", name: "KRAUSZ Розетка 2P+E 16A", sku: "KLZ-SKT-2PE-16A", price: 890, stock: 890, category: "Розеткалар", description: "Сенімді механизм және классикалық ақ корпус.", imageUrl: "", minOrder: 10 },
-  { id: "demo-breaker", name: "Автомат ажыратқыш C16", sku: "KLZ-C16-1P", price: 2450, stock: 120, category: "Автоматика", description: "Үй және коммерциялық желілерге арналған автомат.", imageUrl: "", minOrder: 5 },
-  { id: "demo-linear", name: "KRAUSZ Сызықтық шам 36W", sku: "KLZ-LN-36W", price: 5200, stock: 160, category: "Шамдар", description: "Ұзын сөрелер мен қойма аймақтарына ыңғайлы шам.", imageUrl: "", minOrder: 2 },
+  { id: "demo-phone", name: "Samsung Galaxy A56 5G 256 GB", sku: "SAM-A56-256", price: 239990, stock: 45, category: "Электроника және техника", subcategory: "Смартфондар және аксессуарлар", brand: "Samsung", description: "Күнделікті бизнес пен байланысқа арналған 5G смартфон.", imageUrl: "", imageUrls: [], minOrder: 1, unit: "дана", bulletPoints: ["256 GB жад", "5G байланысы"] },
+  { id: "demo-lamp", name: "KRAUSZ Шам A60 12W E27 6500K", sku: "KLZ-A60-12W-6500", price: 650, stock: 1250, category: "Құрылыс және жөндеу", subcategory: "Электр тауарлары", brand: "KRAUSZ", description: "Күнделікті саудаға арналған үнемді LED шам.", imageUrl: "", imageUrls: [], minOrder: 10, unit: "дана", bulletPoints: ["12 W", "6500 K"] },
+  { id: "demo-coffee", name: "Arabica кофе дәні 1 кг", sku: "COF-ARA-1KG", price: 7950, stock: 220, category: "Азық-түлік және сусындар", subcategory: "Бакалея", brand: "Alsat Select", description: "HoReCa және кеңселерге арналған қуырылған арабика дәні.", imageUrl: "", imageUrls: [], minOrder: 4, unit: "қаптама", bulletPoints: ["100% Arabica", "1 кг"] },
+  { id: "demo-chair", name: "Эргономикалық кеңсе орындығы", sku: "CHR-ERG-BLK", price: 68900, stock: 32, category: "Үй, жиһаз және бақша", subcategory: "Жиһаз", brand: "OfficePro", description: "Бел тірегі мен реттелетін механизмдері бар кеңсе орындығы.", imageUrl: "", imageUrls: [], minOrder: 1, unit: "дана", bulletPoints: ["Бел тірегі", "120 кг дейін"] },
+  { id: "demo-glove", name: "Қорғаныс қолғаптары, 12 жұп", sku: "PPE-GLV-12", price: 5400, stock: 310, category: "Өнеркәсіп және бизнес", subcategory: "Қауіпсіздік және қорғаныс", brand: "SafeWork", description: "Қойма және өндіріс жұмысына арналған қорғаныс қолғаптары.", imageUrl: "", imageUrls: [], minOrder: 2, unit: "қаптама", bulletPoints: ["12 жұп", "Сырғанамайтын жабын"] },
+  { id: "demo-shirt", name: "Ерлерге арналған классикалық жейде", sku: "SHR-CL-WHT", price: 12900, stock: 85, category: "Киім, аяқ киім және аксессуарлар", subcategory: "Ерлер киімі", brand: "Qazaq Basic", description: "Кеңсе мен күнделікті киюге арналған мақта жейде.", imageUrl: "", imageUrls: [], minOrder: 3, unit: "дана", bulletPoints: ["100% мақта", "S–XXL"] },
 ];
 
 function normalizeProduct(row: Record<string, unknown>): CatalogProduct {
@@ -47,10 +51,15 @@ function normalizeProduct(row: Record<string, unknown>): CatalogProduct {
     sku: String(row.sku || "SKU көрсетілмеген"),
     price: Number(row.price || 0),
     stock: Math.max(0, Number(row.stock || 0)),
-    category: String(row.marketplace_category || "Электр тауарлары"),
-    description: String(row.marketplace_description || "Alsat Marketplace каталогындағы тауар."),
+    category: String(row.category || row.marketplace_category || "Басқа тауарлар"),
+    subcategory: String(row.subcategory || row.marketplace_subcategory || "Өзге"),
+    brand: String(row.brand || ""),
+    description: String(row.marketplace_description || row.description || "Alsat Marketplace каталогындағы тауар."),
     imageUrl: typeof row.marketplace_image_url === "string" ? row.marketplace_image_url : typeof row.image_url === "string" ? row.image_url : "",
+    imageUrls: Array.isArray(row.image_urls) ? row.image_urls.filter((item): item is string => typeof item === "string") : [],
     minOrder: Math.max(1, Number(row.marketplace_min_order || 1)),
+    unit: String(row.unit || "дана"),
+    bulletPoints: Array.isArray(row.bullet_points) ? row.bullet_points.filter((item): item is string => typeof item === "string") : [],
   };
 }
 
@@ -59,6 +68,7 @@ export default function MarketplacePage() {
   const [cart, setCart] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Барлығы");
+  const [subcategory, setSubcategory] = useState("Барлығы");
   const [selected, setSelected] = useState<CatalogProduct | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -94,7 +104,7 @@ export default function MarketplacePage() {
       if (!supabase) { setLoading(false); return; }
       const result = await supabase
         .from("products")
-        .select("id,company_id,name,sku,price,stock,marketplace_title,marketplace_description,marketplace_category,marketplace_image_url,image_url,marketplace_min_order")
+        .select("id,company_id,name,sku,price,stock,category,subcategory,brand,description,bullet_points,unit,image_urls,marketplace_title,marketplace_description,marketplace_category,marketplace_subcategory,marketplace_image_url,image_url,marketplace_min_order")
         .eq("workspace_active", true)
         .eq("marketplace_published", true)
         .gt("stock", 0)
@@ -115,10 +125,14 @@ export default function MarketplacePage() {
     return () => { active = false; };
   }, []);
 
+  const categories = useMemo(() => ["Барлығы", ...Array.from(new Set(products.map((product) => product.category))).sort()], [products]);
+  const subcategories = useMemo(() => ["Барлығы", ...Array.from(new Set(products.filter((product) => category === "Барлығы" || product.category === category).map((product) => product.subcategory))).sort()], [category, products]);
   const visibleProducts = useMemo(() => products.filter((product) => {
-    const matchesQuery = `${product.name} ${product.sku} ${product.category}`.toLowerCase().includes(query.toLowerCase());
-    return matchesQuery && (category === "Барлығы" || product.category === category);
-  }), [category, products, query]);
+    const matchesQuery = `${product.name} ${product.sku} ${product.brand} ${product.category} ${product.subcategory}`.toLowerCase().includes(query.toLowerCase());
+    const matchesCategory = category === "Барлығы" || product.category === category;
+    const matchesSubcategory = subcategory === "Барлығы" || product.subcategory === subcategory;
+    return matchesQuery && matchesCategory && matchesSubcategory;
+  }), [category, products, query, subcategory]);
   const cartLines = useMemo(() => Object.entries(cart).map(([id, quantity]) => {
     const product = products.find((item) => item.id === id);
     return product ? { product, quantity } : null;
@@ -213,7 +227,7 @@ export default function MarketplacePage() {
     </header>
 
     <section className="marketplace-hero">
-      <div><span className="marketplace-kicker">ALSAT B2B MARKETPLACE</span><h1>Электр тауарларын бір жерден сатып алыңыз.</h1><p>Тексерілген жеткізушілер, нақты қалдық және Alsat-тың жылдам қойма-жеткізу процесі.</p><div className="marketplace-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Тауар, SKU немесе категория іздеу"/><kbd>⌘ K</kbd></div></div>
+      <div><span className="marketplace-kicker">ALSAT B2B MARKETPLACE</span><h1>Бизнеске керек барлық тауарды көтерме бағамен алыңыз.</h1><p>Барлық категориядағы тексерілген жеткізушілер, нақты қалдық және бақыланатын қойма-жеткізу процесі.</p><div className="marketplace-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Тауар, бренд, SKU немесе категория іздеу"/><kbd>⌘ K</kbd></div></div>
       <div className="marketplace-hero-card"><span>Бүгінгі ұсыныс</span><strong>Көтерме бағалар</strong><small>Дүкеніңізге керек тауарды тиімді бағамен алыңыз.</small><a href="#catalog">Каталогты ашу →</a></div>
     </section>
 
@@ -221,19 +235,20 @@ export default function MarketplacePage() {
 
     <section className="marketplace-catalog" id="catalog">
       <div className="marketplace-section-head"><div><span className="marketplace-kicker">КАТАЛОГ</span><h2>Сұраныстағы тауарлар</h2></div><span className="catalog-count">{visibleProducts.length} тауар</span></div>
-      <div className="marketplace-chips">{categories.map((item) => <button className={category === item ? "active" : ""} key={item} onClick={() => setCategory(item)}>{item}</button>)}</div>
+      <div className="marketplace-chips">{categories.map((item) => <button className={category === item ? "active" : ""} key={item} onClick={() => { setCategory(item); setSubcategory("Барлығы"); }}>{item}</button>)}</div>
+      <div className="marketplace-subcategory-filter"><label>Подкатегория<select value={subcategory} onChange={(event) => setSubcategory(event.target.value)}>{subcategories.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><span>{category === "Барлығы" ? "Барлық категория" : category}</span></div>
       {loading && <div className="marketplace-loading">Каталог жүктелуде…</div>}
       {!loading && !visibleProducts.length && <div className="marketplace-empty"><strong>Тауар табылмады</strong><span>Іздеу сөзін немесе категорияны өзгертіп көріңіз.</span></div>}
       <div className="marketplace-grid">{visibleProducts.map((product) => <article className="marketplace-product-card" key={product.id}>
-        <button className="product-visual" onClick={() => setSelected(product)} aria-label={`${product.name} карточкасын ашу`}>{product.imageUrl ? <img src={product.imageUrl} alt=""/> : <span>{product.category === "Шамдар" ? "◌" : product.category === "Розеткалар" ? "◉" : "▣"}</span>}</button>
-        <div className="product-card-copy"><span className="product-category">{product.category}</span><h3>{product.name}</h3><small>SKU: {product.sku}</small><div className="product-card-bottom"><div><strong>{money.format(product.price)}</strong><span>Қалдық: {product.stock} дана</span></div><button onClick={() => addToCart(product)} aria-label={`${product.name} себетке қосу`}>+</button></div></div>
+        <button className="product-visual" onClick={() => setSelected(product)} aria-label={`${product.name} карточкасын ашу`}>{product.imageUrl ? <img src={product.imageUrl} alt=""/> : <span>▣</span>}</button>
+        <div className="product-card-copy"><span className="product-category">{product.category} · {product.subcategory}</span><h3>{product.name}</h3><small>{product.brand ? `${product.brand} · ` : ""}SKU: {product.sku}</small><div className="product-card-bottom"><div><strong>{money.format(product.price)}</strong><span>Қалдық: {product.stock} {product.unit}</span></div><button onClick={() => addToCart(product)} aria-label={`${product.name} себетке қосу`}>+</button></div></div>
       </article>)}</div>
     </section>
 
-    <footer className="marketplace-footer"><div><strong>ALSAT</strong><span>Бизнеске арналған электр тауарларының marketplace-і.</span></div><Link href="/workspace-signup">Серіктес болу →</Link></footer>
+    <footer className="marketplace-footer"><div><strong>ALSAT</strong><span>Барлық тауар категориясына арналған B2B marketplace.</span></div><Link href="/workspace-signup">Серіктес болу →</Link></footer>
     {notice && <div className="marketplace-toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
 
-    {selected && <div className="marketplace-overlay" onClick={() => setSelected(null)}><section className="marketplace-modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setSelected(null)}>×</button><div className="modal-product-visual">{selected.imageUrl ? <img src={selected.imageUrl} alt=""/> : <span>▣</span>}</div><span className="product-category">{selected.category}</span><h2>{selected.name}</h2><p>{selected.description}</p><div className="modal-meta"><span>SKU <b>{selected.sku}</b></span><span>Қалдық <b>{selected.stock} дана</b></span><span>Минимум <b>{selected.minOrder} дана</b></span></div><strong className="modal-price">{money.format(selected.price)}</strong><button className="modal-primary" onClick={() => { addToCart(selected); setSelected(null); setCartOpen(true); }}>Себетке қосу →</button></section></div>}
+    {selected && <div className="marketplace-overlay" onClick={() => setSelected(null)}><section className="marketplace-modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setSelected(null)}>×</button><div className="modal-product-visual">{selected.imageUrl ? <img src={selected.imageUrl} alt=""/> : <span>▣</span>}</div><span className="product-category">{selected.category} · {selected.subcategory}</span><h2>{selected.name}</h2>{selected.brand && <strong className="modal-brand">{selected.brand}</strong>}<p>{selected.description}</p>{selected.bulletPoints.length > 0 && <ul className="modal-bullets">{selected.bulletPoints.map((item) => <li key={item}>{item}</li>)}</ul>}<div className="modal-meta"><span>SKU <b>{selected.sku}</b></span><span>Қалдық <b>{selected.stock} {selected.unit}</b></span><span>Минимум <b>{selected.minOrder} {selected.unit}</b></span></div><strong className="modal-price">{money.format(selected.price)}</strong><button className="modal-primary" onClick={() => { addToCart(selected); setSelected(null); setCartOpen(true); }}>Себетке қосу →</button></section></div>}
     {cartOpen && <div className="marketplace-overlay" onClick={() => setCartOpen(false)}><aside className="marketplace-cart" onClick={(event) => event.stopPropagation()}><div className="cart-head"><div><span className="marketplace-kicker">ALSAT MARKETPLACE</span><h2>Себет</h2></div><button className="modal-close" onClick={() => setCartOpen(false)}>×</button></div>{cartLines.length ? <><div className="cart-lines">{cartLines.map(({ product, quantity }) => <div className="cart-line" key={product.id}><div className="cart-line-visual">▣</div><div className="cart-line-copy"><strong>{product.name}</strong><small>{money.format(product.price)}</small><div className="quantity-control"><button onClick={() => changeQuantity(product, -1)}>−</button><b>{quantity}</b><button onClick={() => changeQuantity(product, 1)}>+</button></div></div><strong>{money.format(product.price * quantity)}</strong></div>)}</div><div className="cart-summary"><span>Барлығы <b>{cartCount} дана</b></span><strong>{money.format(cartTotal)}</strong></div><button className="modal-primary" onClick={() => void openCheckout()} disabled={checkoutLoading}>{checkoutLoading ? "Тексерілуде…" : "Тапсырысты рәсімдеу →"}</button><small className="cart-hint">Тапсырыс жасалғанда ол бірден Alsat қоймасының жұмыс тізбегіне түседі.</small></> : <div className="cart-empty"><span>🛒</span><strong>Себет бос</strong><small>Каталогтан тауар қосыңыз.</small><button className="modal-primary" onClick={() => setCartOpen(false)}>Каталогқа оралу</button></div>}</aside></div>}
     {checkoutOpen && <div className="marketplace-overlay" onClick={() => setCheckoutOpen(false)}><section className="checkout-modal" onClick={(event) => event.stopPropagation()}><div className="cart-head"><div><span className="marketplace-kicker">ALSAT MARKETPLACE</span><h2>{checkoutSuccess ? "Тапсырыс қабылданды" : "Тапсырысты рәсімдеу"}</h2></div><button className="modal-close" onClick={() => setCheckoutOpen(false)}>×</button></div>{checkoutSuccess ? <div className="checkout-success"><span>✓</span><strong>№{checkoutSuccess}</strong><p>Тапсырыс қоймаға жіберілді. Қоймашы қабылдағаннан кейін QR стикер мен накладной дайындалады.</p><button className="modal-primary" onClick={() => { setCheckoutOpen(false); setCheckoutSuccess(""); }}>Marketplace-ке оралу</button></div> : checkoutError && !sellerCompanyId ? <div className="checkout-auth-error"><strong>Workspace-ке кіру қажет</strong><p>{checkoutError}</p><Link className="modal-primary" href="/workspace-login">Workspace-ке кіру →</Link></div> : <form className="checkout-form" onSubmit={submitCheckout}>{checkoutError && <div className="checkout-error">{checkoutError}</div>}{checkoutStores.length > 0 && <label>Дүкенді таңдаңыз<select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)}><option value="">+ Жаңа дүкен қосу</option>{checkoutStores.map((store) => <option value={store.id} key={store.id}>{store.name} · {store.address}</option>)}</select></label>}{!selectedStoreId && <><label>Дүкен атауы<input required value={newStore.name} onChange={(event) => setNewStore((current) => ({ ...current, name: event.target.value }))} placeholder="Строймаг"/></label><label>Мекенжай<input required value={newStore.address} onChange={(event) => setNewStore((current) => ({ ...current, address: event.target.value }))} placeholder="Алматы қ., Райымбек 348"/></label><div className="checkout-two"><label>Байланыс тұлғасы<input value={newStore.contactName} onChange={(event) => setNewStore((current) => ({ ...current, contactName: event.target.value }))} placeholder="Нұрлан Ә."/></label><label>Телефон<input required value={newStore.phone} onChange={(event) => setNewStore((current) => ({ ...current, phone: event.target.value }))} placeholder="+7 700 000 00 00"/></label></div></>}<label>Ескерту<textarea value={checkoutNote} onChange={(event) => setCheckoutNote(event.target.value)} placeholder="Жеткізу бойынша қосымша ақпарат"/></label><div className="checkout-total"><span>Тапсырыс сомасы</span><strong>{money.format(cartTotal)}</strong></div><button className="modal-primary" disabled={checkoutLoading}>{checkoutLoading ? "Жіберілуде…" : "Тапсырысты қоймаға жіберу →"}</button></form>}</section></div>}
     {usingDemo && <div className="marketplace-demo-badge">Демо каталог</div>}

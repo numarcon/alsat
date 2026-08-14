@@ -10,9 +10,10 @@ import ProductListEnhanced from "./ProductListEnhanced";
 import CompanyAgents from "./CompanyAgents";
 import CompanyOrders from "./CompanyOrders";
 import CompanyCommissions from "./CompanyCommissions";
+import type { ProductCatalogItem, ProductVariantOption } from "../lib/product-types";
 
 type Screen = "dashboard" | "products" | "customers" | "orders" | "agents" | "commissions" | "modules" | "product-form";
-type Product = { id: number; name: string; sku: string; price: number; purchasePrice?: number; salePrice?: number; wholesalePrice?: number; imageUrl?: string; stock: number; commission: number; workspace: boolean; agents: boolean; marketplace: boolean };
+type Product = ProductCatalogItem;
 type Customer = { id: string; name: string; address: string | null; contact_name: string | null; phone: string | null };
 type Metrics = { products: number; orders: number; customers: number; agents: number; stock: number; revenue: number; commissions: number };
 type RecentOrder = { id: string; total: number; status: string; customer: string };
@@ -40,6 +41,31 @@ function formatNumber(value: number) {
 
 function formatMoney(value: number) { return `${formatNumber(value)} ₸`; }
 
+function optionalNumber(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  return text === "" ? null : Number(text);
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function variantArray(value: unknown): ProductVariantOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const option = item as Record<string, unknown>;
+    const name = typeof option.name === "string" ? option.name : "";
+    const values = stringArray(option.values);
+    return name && values.length ? [{ name, values }] : [];
+  });
+}
+
+function attributeRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+}
+
 export default function WorkspaceV2() {
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [loading, setLoading] = useState(true);
@@ -59,7 +85,7 @@ export default function WorkspaceV2() {
     if (!supabase) return;
     const { data, error: productError } = await supabase
       .from("products")
-      .select("id,name,sku,price,purchase_price,sale_price,wholesale_price,image_url,stock,commission_rate,workspace_active,sales_agent_visible,marketplace_published")
+      .select("id,name,sku,price,purchase_price,sale_price,wholesale_price,image_url,image_urls,stock,commission_rate,workspace_active,sales_agent_visible,marketplace_published,category,subcategory,brand,manufacturer,model,barcode,barcode_type,description,bullet_points,search_terms,country_of_origin,unit,currency,vat_rate,marketplace_min_order,max_order,reorder_point,warehouse_location,weight_kg,length_cm,width_cm,height_cm,package_quantity,shipping_class,warranty_months,condition,certification,dangerous_goods,has_variants,variant_options,attributes,marketplace_title,marketplace_description")
       .eq("company_id", targetCompanyId)
       .order("created_at", { ascending: false });
     if (productError) { setError(productError.message); return; }
@@ -72,11 +98,45 @@ export default function WorkspaceV2() {
       salePrice: Number(product.sale_price || product.price || 0),
       wholesalePrice: Number(product.wholesale_price || 0),
       imageUrl: product.image_url ?? "",
+      imageUrls: stringArray(product.image_urls),
       stock: Number(product.stock || 0),
       commission: Number(product.commission_rate || 0),
       workspace: Boolean(product.workspace_active),
       agents: Boolean(product.sales_agent_visible),
       marketplace: Boolean(product.marketplace_published),
+      category: product.category ?? "Басқа тауарлар",
+      subcategory: product.subcategory ?? "Өзге",
+      brand: product.brand ?? "",
+      manufacturer: product.manufacturer ?? "",
+      model: product.model ?? "",
+      barcode: product.barcode ?? "",
+      barcodeType: product.barcode_type ?? "EAN-13",
+      description: product.description ?? "",
+      bulletPoints: stringArray(product.bullet_points),
+      searchTerms: product.search_terms ?? "",
+      countryOfOrigin: product.country_of_origin ?? "",
+      unit: product.unit ?? "дана",
+      currency: product.currency ?? "KZT",
+      vatRate: Number(product.vat_rate || 0),
+      minOrder: Number(product.marketplace_min_order || 1),
+      maxOrder: product.max_order == null ? undefined : Number(product.max_order),
+      reorderPoint: Number(product.reorder_point || 0),
+      warehouseLocation: product.warehouse_location ?? "",
+      weightKg: product.weight_kg == null ? undefined : Number(product.weight_kg),
+      lengthCm: product.length_cm == null ? undefined : Number(product.length_cm),
+      widthCm: product.width_cm == null ? undefined : Number(product.width_cm),
+      heightCm: product.height_cm == null ? undefined : Number(product.height_cm),
+      packageQuantity: Number(product.package_quantity || 1),
+      shippingClass: product.shipping_class ?? "standard",
+      warrantyMonths: Number(product.warranty_months || 0),
+      condition: product.condition ?? "new",
+      certification: product.certification ?? "",
+      dangerousGoods: Boolean(product.dangerous_goods),
+      hasVariants: Boolean(product.has_variants),
+      variantOptions: variantArray(product.variant_options),
+      attributes: attributeRecord(product.attributes),
+      marketplaceTitle: product.marketplace_title ?? "",
+      marketplaceDescription: product.marketplace_description ?? "",
     })));
   }, []);
 
@@ -185,20 +245,46 @@ export default function WorkspaceV2() {
     const purchasePrice = Number(values.get("purchasePrice") || 0);
     const salePrice = Number(values.get("salePrice") || 0);
     const wholesalePrice = Number(values.get("wholesalePrice") || 0);
-    const imageFile = values.get("image");
-    let imageUrl = editingProduct?.imageUrl || "";
+    const imageFiles = values.getAll("images").filter((item): item is File => item instanceof File && item.size > 0);
+    let imageUrls = editingProduct?.imageUrls?.length
+      ? [...editingProduct.imageUrls]
+      : editingProduct?.imageUrl
+        ? [editingProduct.imageUrl]
+        : [];
     setProductStatus("Сақталуда…");
     try {
-      if (imageFile instanceof File && imageFile.size > 0) {
+      for (const imageFile of imageFiles.slice(0, Math.max(0, 8 - imageUrls.length))) {
         const extension = imageFile.name.split(".").pop()?.toLowerCase() || "jpg";
         const path = `${companyId}/${crypto.randomUUID()}.${extension}`;
         const upload = await supabase.storage.from("product-images").upload(path, imageFile, { cacheControl: "3600", upsert: false, contentType: imageFile.type });
         if (upload.error) throw upload.error;
-        imageUrl = supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+        imageUrls.push(supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl);
       }
+      imageUrls = imageUrls.slice(0, 8);
+      const imageUrl = imageUrls[0] || "";
+      const name = String(values.get("name") || "").trim();
+      const category = String(values.get("category") || "Басқа тауарлар");
+      const subcategory = String(values.get("subcategory") || "Өзге");
+      const description = String(values.get("description") || "").trim();
+      const bulletPoints = values.getAll("bulletPoint").map(String).map((item) => item.trim()).filter(Boolean);
+      const variantNames = values.getAll("variantName").map(String);
+      const variantValues = values.getAll("variantValues").map(String);
+      const variantOptions = variantNames.flatMap((variantName, index) => {
+        const variantNameClean = variantName.trim();
+        const optionValues = (variantValues[index] || "").split(",").map((item) => item.trim()).filter(Boolean);
+        return variantNameClean && optionValues.length ? [{ name: variantNameClean, values: optionValues }] : [];
+      });
+      const attributeNames = values.getAll("attributeName").map(String);
+      const attributeValues = values.getAll("attributeValue").map(String);
+      const attributes = Object.fromEntries(attributeNames.flatMap((attributeName, index) => {
+        const cleanName = attributeName.trim();
+        const cleanValue = (attributeValues[index] || "").trim();
+        return cleanName && cleanValue ? [[cleanName, cleanValue]] : [];
+      }));
+      const marketplacePublished = values.get("marketplace") === "on";
       const payload = {
         company_id: companyId,
-        name: String(values.get("name") || "").trim(),
+        name,
         sku: String(values.get("sku") || "").trim(),
         price: salePrice,
         purchase_price: purchasePrice,
@@ -208,10 +294,45 @@ export default function WorkspaceV2() {
         commission_rate: Number(values.get("commission") || 0),
         workspace_active: values.get("workspace") === "on",
         sales_agent_visible: values.get("agents") === "on",
-        marketplace_published: values.get("marketplace") === "on",
-        marketplace_category: String(values.get("category") || "Электр тауарлары"),
+        marketplace_published: marketplacePublished,
+        category,
+        subcategory,
+        brand: String(values.get("brand") || "").trim() || null,
+        manufacturer: String(values.get("manufacturer") || "").trim() || null,
+        model: String(values.get("model") || "").trim() || null,
+        barcode: String(values.get("barcode") || "").trim() || null,
+        barcode_type: String(values.get("barcodeType") || "EAN-13"),
+        description,
+        bullet_points: bulletPoints,
+        search_terms: String(values.get("searchTerms") || "").trim() || null,
+        country_of_origin: String(values.get("countryOfOrigin") || "").trim() || null,
+        unit: String(values.get("unit") || "дана"),
+        currency: String(values.get("currency") || "KZT"),
+        vat_rate: Number(values.get("vatRate") || 0),
         marketplace_min_order: Number(values.get("minOrder") || 1),
+        max_order: optionalNumber(values.get("maxOrder")),
+        reorder_point: Number(values.get("reorderPoint") || 0),
+        warehouse_location: String(values.get("warehouseLocation") || "").trim() || null,
+        weight_kg: optionalNumber(values.get("weightKg")),
+        length_cm: optionalNumber(values.get("lengthCm")),
+        width_cm: optionalNumber(values.get("widthCm")),
+        height_cm: optionalNumber(values.get("heightCm")),
+        package_quantity: Number(values.get("packageQuantity") || 1),
+        shipping_class: String(values.get("shippingClass") || "standard"),
+        warranty_months: Number(values.get("warrantyMonths") || 0),
+        condition: String(values.get("condition") || "new"),
+        certification: String(values.get("certification") || "").trim() || null,
+        dangerous_goods: values.get("dangerousGoods") === "on",
+        has_variants: values.get("hasVariants") === "on",
+        variant_options: variantOptions,
+        attributes,
+        marketplace_title: String(values.get("marketplaceTitle") || "").trim() || name,
+        marketplace_description: String(values.get("marketplaceDescription") || "").trim() || description,
+        marketplace_category: category,
+        marketplace_subcategory: subcategory,
+        marketplace_updated_at: marketplacePublished ? new Date().toISOString() : null,
         image_url: imageUrl || null,
+        image_urls: imageUrls,
         marketplace_image_url: imageUrl || null,
       };
       const result = editingProduct
@@ -227,7 +348,7 @@ export default function WorkspaceV2() {
     }
   }
 
-  async function toggleProduct(id: number, field: "workspace" | "agents" | "marketplace") {
+  async function toggleProduct(id: string | number, field: "workspace" | "agents" | "marketplace") {
     if (!supabase || !companyId) return;
     const product = products.find((item) => item.id === id);
     if (!product) return;

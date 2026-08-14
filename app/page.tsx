@@ -46,9 +46,8 @@ export default function Home() {
         const { data: company } = await supabase.from("companies").select("name").eq("id", owner.company_id).single();
         const name = company?.name ?? "Компания Workspace";
         rememberCompany(owner.company_id, name);
-        setCompanyId(owner.company_id);
-        setCompanyName(name);
-        setRegistered(true);
+        window.location.replace("/workspace");
+        return;
       } else {
         localStorage.removeItem("alsat-company");
         localStorage.removeItem("alsat-company-id");
@@ -104,10 +103,8 @@ export default function Home() {
       if (!user) throw new Error("Аккаунт ашылмады. Қайта көріңіз.");
       const company = await bootstrapOwnerCompany(user.id, pending);
       rememberCompany(company.id, company.name);
-      setCompanyId(company.id);
-      setCompanyName(company.name);
-      setRegistered(true);
-      setNotice("Компания Supabase-ке сақталды · Компания әкімшісі");
+      window.location.href = "/workspace";
+      return;
     } catch (registrationFailure) {
       const message = registrationFailure instanceof Error ? registrationFailure.message : "Тіркелу аяқталмады.";
       setRegistrationError(message.includes("already registered") ? "Бұл email бұрын тіркелген. Workspace-қа кіру батырмасын пайдаланыңыз." : message);
